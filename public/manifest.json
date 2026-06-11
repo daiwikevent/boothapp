@@ -1,0 +1,37 @@
+{
+  "name": "BoothMagic",
+  "short_name": "BoothMagic",
+  "description": "AI Photobooth for Indian Events — studio-quality portraits in 30 seconds",
+  "start_url": "/booth",
+  "display": "standalone",
+  "orientation": "landscape-primary",
+  "background_color": "#0B0B14",
+  "theme_color": "#0B0B14",
+  "lang": "en",
+  "scope": "/",
+  "categories": ["photography", "entertainment", "business"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/screenshot-booth.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Booth camera view"
+    }
+  ],
+  "prefer_related_applications": false
+}

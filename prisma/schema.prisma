@@ -1,0 +1,258 @@
+// prisma/schema.prisma
+// Source of truth for the BoothMagic database schema.
+// Doc refs: docs/02-Technical-Architecture.md §3, docs/06-Self-Hosted-Architecture-and-Deployment.md §1
+//
+// Stack: Prisma ORM + PostgreSQL 16 (Docker)
+// Auth:  Auth.js v5 (Credentials provider) — passwords stored as bcrypt hashes in User.passwordHash
+// Tenancy: application-layer isolation via lib/db-scoped.ts (no RLS)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH — operator accounts (self-hosted, bcrypt passwords)
+// ============================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  emailVerified DateTime?
+  passwordHash  String   // bcrypt hash — never expose to client
+  displayName   String?
+  companyName   String?
+  country       String   @default("IN")
+  logoUrl       String?
+  plan          Plan     @default(TRIAL)
+  isAdmin       Boolean  @default(false) // internal admin flag, checked server-side only
+  countdownSecs Int      @default(3)     // booth countdown (1–10)
+  boothPin      String   @default("0000") // T22: 4-digit PIN for booth settings lock
+  gdriveRefreshToken String?   // OAuth refresh token for Google Drive integration
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Verification tokens (email verify + password reset)
+  verificationTokens VerificationToken[]
+
+  // Tenant-owned rows
+  events        Event[]
+  photos        Photo[]
+  creditLedger  CreditLedger[]
+  subscriptions Subscription[]
+  payments      Payment[]
+  presets       Preset[]       // operator custom presets (ownerId = this user)
+
+  @@map("users")
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique // bcrypt-safe random token
+  type      TokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@map("verification_tokens")
+}
+
+enum TokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+enum Plan {
+  TRIAL
+  STARTER
+  PRO
+  BUSINESS
+}
+
+// ============================================================
+// EVENTS
+// Doc: §3 — id, user_id, name, slug, is_active, created_at
+// ============================================================
+
+model Event {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String   // for /s/[slug] slideshow — unique per user
+  isActive  Boolean  @default(false)
+  gdriveFolderId String? // Google Drive folder ID for uploads
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos        Photo[]
+  eventPresets  EventPreset[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+  @@map("events")
+}
+
+// ============================================================
+// PRESETS
+// Doc: §3 — system presets (ownerId NULL) + operator custom
+// ============================================================
+
+model Preset {
+  id           String      @id @default(cuid())
+  ownerId      String?     // NULL = system preset; operator id = custom preset
+  owner        User?       @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  name         String
+  prompt       String      // AI transformation instruction
+  peopleTag    PeopleTag   @default(SOLO)
+  thumbnailUrl String?
+  isActive     Boolean     @default(true)
+  planRequired Plan?       // NULL = all plans; STARTER/PRO/BUSINESS = gated
+  sortOrder    Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  eventPresets EventPreset[]
+
+  @@index([ownerId])
+  @@map("presets")
+}
+
+enum PeopleTag {
+  SOLO
+  COUPLE
+  GROUP
+}
+
+// ============================================================
+// EVENT–PRESET LINKING (junction table)
+// ============================================================
+
+model EventPreset {
+  eventId   String
+  event     Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  presetId  String
+  preset    Preset @relation(fields: [presetId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, presetId])
+  @@map("event_presets")
+}
+
+// ============================================================
+// PHOTOS
+// Doc: §3 — original_path, output_path, short_code, status, expires_at
+// ============================================================
+
+model Photo {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId        String
+  event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  presetId       String?     // null if preset was deleted
+  shortCode      String      @unique // nanoid ≥10 chars for /g/[shortCode]
+  originalPath   String?     // relative to /data/storage/originals/
+  outputPath     String?     // relative to /data/storage/outputs/
+  status         PhotoStatus @default(PROCESSING)
+  creditsCharged Int         @default(3)
+  errorMsg       String?
+  createdAt      DateTime    @default(now())
+  expiresAt      DateTime    // createdAt + 3 days, set on INSERT
+
+  @@index([userId])
+  @@index([eventId])
+  @@index([shortCode])
+  @@index([expiresAt]) // cleanup job queries by this
+  @@map("photos")
+}
+
+enum PhotoStatus {
+  PROCESSING
+  DONE
+  FAILED
+}
+
+// ============================================================
+// CREDIT LEDGER — append-only; balance = SUM(delta)
+// Doc: §3 — never store a mutable balance
+// ============================================================
+
+model CreditLedger {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delta     Int          // positive = grant, negative = spend
+  reason    CreditReason
+  refId     String?      // photoId / razorpayPaymentId / subscriptionId
+  createdAt DateTime     @default(now())
+
+  @@index([userId])
+  @@map("credit_ledger")
+}
+
+enum CreditReason {
+  TRIAL_GRANT
+  SUBSCRIPTION_GRANT
+  TOPUP
+  PHOTO_SPEND
+  VIDEO_SPEND
+  REFUND
+}
+
+// ============================================================
+// SUBSCRIPTIONS
+// ============================================================
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpaySubId        String   @unique
+  plan                 Plan
+  status               String   // active | cancelled | expired
+  currentPeriodEnd     DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+model Payment {
+  id               String      @id @default(cuid())
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  razorpayPaymentId String     @unique // idempotency key — duplicate webhook = no double grant
+  amountInr        Int         // paise (1 INR = 100 paise)
+  creditsGranted   Int
+  type             PaymentType
+  createdAt        DateTime    @default(now())
+
+  @@index([userId])
+  @@map("payments")
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  TOPUP
+}
+
+/// Admin-configurable key/value settings (AI provider keys, active model, etc.)
+/// Stored in DB so they can be changed at runtime without redeployment.
+model AppSetting {
+  key       String   @id       // e.g. "gemini_api_key", "active_model"
+  value     String             // the setting value
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}

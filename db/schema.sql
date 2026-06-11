@@ -1,0 +1,11 @@
+-- schema.sql
+-- Prisma schema (prisma/schema.prisma) is the source of truth for T02+.
+-- This file is kept for reference/documentation only.
+-- See docs/02-Technical-Architecture.md §3 for the schema design.
+--
+-- Tables: profiles, credit_ledger, events, presets, event_presets,
+--         photos, subscriptions, payments
+--
+-- Generated in T02 via: npx prisma migrate dev --name init
+
+-- (Stub — Prisma migration will generate the actual SQL)
