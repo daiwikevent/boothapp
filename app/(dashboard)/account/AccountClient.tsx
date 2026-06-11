@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { signOut } from "next-auth/react";
+import type { CreditPack } from "@prisma/client";
 
 interface Props {
   userId: string;
@@ -25,6 +26,7 @@ interface Props {
     hasCsvReports: boolean;
     hasAttendantPin: boolean;
   };
+  creditPacks: CreditPack[];
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -58,6 +60,7 @@ export default function AccountClient({
   logoUrl: initialLogoUrl,
   boothPin: initialBoothPin,
   features,
+  creditPacks,
 }: Props) {
   const [name, setName] = useState(displayName);
   const [company, setCompany] = useState(companyName);
@@ -65,7 +68,7 @@ export default function AccountClient({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [buyingPack, setBuyingPack] = useState<number | null>(null);
+  const [buyingPack, setBuyingPack] = useState<string | null>(null);
   // T19: Logo state
   const [logoUrl, setLogoUrl] = useState<string | null>(initialLogoUrl);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -88,13 +91,13 @@ export default function AccountClient({
     });
   };
 
-  async function handleBuyTopup(packIndex: number) {
-    setBuyingPack(packIndex);
+  async function handleBuyTopup(packId: string) {
+    setBuyingPack(packId);
     try {
       const res = await fetch("/api/razorpay/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "topup", packIndex }),
+        body: JSON.stringify({ type: "topup", packId }),
       });
 
       if (!res.ok) {
@@ -414,29 +417,29 @@ export default function AccountClient({
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
-          {[
-            { credits: 120, price: "₹1,999", label: "Starter Pack" },
-            { credits: 360, price: "₹4,999", label: "Pro Pack" },
-            { credits: 700, price: "₹7,999", label: "Super Pack" },
-            { credits: 1500, price: "₹14,999", label: "Agency Pack" },
-          ].map((pack, i) => (
-            <div key={i} style={{ padding: "var(--space-4)", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", gap: 10, textAlign: "center" }}>
+          {creditPacks.map((pack) => (
+            <div key={pack.id} style={{ padding: "var(--space-4)", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", gap: 10, textAlign: "center" }}>
               <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}>{pack.label}</div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 <span style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>{pack.credits}</span>
                 <span style={{ fontSize: 11, color: "var(--primary)", fontWeight: 600 }}>credits</span>
               </div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{pack.price}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>₹{pack.priceInr.toLocaleString("en-IN")}</div>
               <button
-                onClick={() => handleBuyTopup(i)}
+                onClick={() => handleBuyTopup(pack.id)}
                 disabled={buyingPack !== null}
                 className="btn btn-primary btn-sm"
                 style={{ width: "100%", minHeight: 32, padding: "4px 8px", fontSize: 12 }}
               >
-                {buyingPack === i ? "Buying..." : "Buy Pack"}
+                {buyingPack === pack.id ? "Buying..." : "Buy Pack"}
               </button>
             </div>
           ))}
+          {creditPacks.length === 0 && (
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "var(--space-6)", color: "var(--text-muted)", fontSize: 14 }}>
+              No credit packs available for purchase at the moment.
+            </div>
+          )}
         </div>
 
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: "var(--space-4)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>

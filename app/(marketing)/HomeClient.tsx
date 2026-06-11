@@ -182,7 +182,7 @@ export default function HomeClient({ plans = [], userEmail = null, currentPlan =
 
   async function handleBuy(planName: string) {
     if (!userEmail) {
-      router.push(`/login?callbackUrl=/#pricing`);
+      router.push(`/signup?callbackUrl=/#pricing`);
       return;
     }
     setLoadingPlan(planName);
@@ -1070,7 +1070,18 @@ export default function HomeClient({ plans = [], userEmail = null, currentPlan =
             )}
 
             {/* Trust footer */}
-            <div style={{ textAlign: "center", marginTop: 40 }}>
+            <div style={{ textAlign: "center", marginTop: 48 }}>
+              <Link
+                href="/signup"
+                className="btn btn-primary"
+                style={{
+                  fontSize: 17, padding: "16px 40px", borderRadius: 14,
+                  boxShadow: "0 8px 32px rgba(124,92,255,0.4)",
+                  display: "inline-block", marginBottom: 20,
+                }}
+              >
+                🚀 Start Free Trial — 9 Credits Included
+              </Link>
               <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
                 ✅ No credit card for free trial &nbsp;·&nbsp; 🔒 Payments secured by Razorpay &nbsp;·&nbsp;
                 💬 Cancel anytime

@@ -42,6 +42,7 @@ export default async function AdminPage() {
     recentPayments,
     recentLedger,
     billingPlans,
+    creditPacks,
   ] = await Promise.all([
     listPresets(scoped),
     prisma.user.findMany({
@@ -88,6 +89,7 @@ export default async function AdminPage() {
       },
     }),
     getOrSeedBillingPlans(),
+    prisma.creditPack.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);
 
   const systemPresets = presets.filter((p) => !p.ownerId);
@@ -148,6 +150,7 @@ export default async function AdminPage() {
         paymentsLog={paymentsLog}
         ledgerLog={ledgerLog}
         initialBillingPlans={JSON.parse(JSON.stringify(billingPlans))}
+        initialCreditPacks={JSON.parse(JSON.stringify(creditPacks))}
       />
     </div>
   );

@@ -35,7 +35,7 @@ export default function PricingClient({ userEmail, currentPlan, initialPlans }: 
 
   async function handleCheckout(planName: string) {
     if (!userEmail) {
-      router.push(`/login?callbackUrl=/pricing`);
+      router.push(`/signup?callbackUrl=/pricing`);
       return;
     }
 

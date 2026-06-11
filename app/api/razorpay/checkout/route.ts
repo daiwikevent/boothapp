@@ -3,14 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSetting } from "@/lib/app-settings";
 import { prisma } from "@/lib/prisma";
 
-// Map for Top-up Packs: [credits, price in paise]
-const TOPUP_PACKS = [
-  { credits: 120, price: 199900 },
-  { credits: 360, price: 499900 },
-  { credits: 700, price: 799900 },
-  { credits: 1500, price: 1499900 },
-];
-
 export async function POST(req: NextRequest) {
   const KEY_ID = await getSetting("razorpay_key_id", "RAZORPAY_KEY_ID");
   const KEY_SECRET = await getSetting("razorpay_key_secret", "RAZORPAY_KEY_SECRET");
@@ -22,21 +14,24 @@ export async function POST(req: NextRequest) {
 
   const userId = session.user.id;
   const data = await req.json();
-  const { type, packIndex, plan } = data; // type: "topup" | "subscription"
+  const { type, packId, plan } = data; // type: "topup" | "subscription"
 
   const isMock = !KEY_ID || !KEY_SECRET || KEY_ID === "mock" || KEY_SECRET === "mock";
 
   if (type === "topup") {
-    const pack = TOPUP_PACKS[packIndex];
-    if (!pack) {
-      return NextResponse.json({ error: "Invalid pack index" }, { status: 400 });
+    // Look up credit pack from DB
+    const pack = packId ? await prisma.creditPack.findUnique({ where: { id: packId } }) : null;
+    if (!pack || !pack.isActive) {
+      return NextResponse.json({ error: "Invalid or inactive credit pack" }, { status: 400 });
     }
+
+    const amountPaise = pack.priceInr * 100;
 
     if (isMock) {
       return NextResponse.json({
         mock: true,
         orderId: `order_mock_${Math.random().toString(36).substring(2, 11)}`,
-        amount: pack.price,
+        amount: amountPaise,
         credits: pack.credits,
         userId,
       });
@@ -51,9 +46,9 @@ export async function POST(req: NextRequest) {
           Authorization: `Basic ${Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString("base64")}`,
         },
         body: JSON.stringify({
-          amount: pack.price,
+          amount: amountPaise,
           currency: "INR",
-          receipt: `topup_${userId}_${Date.now()}`,
+          receipt: `top_${userId.slice(-8)}_${Date.now()}`.slice(0, 40),
           notes: {
             userId,
             packCredits: pack.credits.toString(),
@@ -83,13 +78,21 @@ export async function POST(req: NextRequest) {
 
   if (type === "subscription") {
     const planName = (plan as string).toUpperCase();
+    console.log("[checkout] subscription request for plan:", planName, "userId:", userId);
     if (planName === "TRIAL") {
       return NextResponse.json({ error: "Cannot subscribe to TRIAL plan" }, { status: 400 });
     }
 
-    const bp = await prisma.billingPlan.findUnique({
-      where: { name: planName }
-    });
+    let bp;
+    try {
+      bp = await prisma.billingPlan.findUnique({
+        where: { name: planName }
+      });
+      console.log("[checkout] billingPlan lookup result:", bp ? `found (${bp.name}, ₹${bp.priceInr})` : "NOT FOUND");
+    } catch (dbErr) {
+      console.error("[checkout] DB error looking up billingPlan:", dbErr);
+      return NextResponse.json({ error: "Database error" }, { status: 500 });
+    }
     if (!bp || !bp.isActive) {
       return NextResponse.json({ error: "Invalid or inactive plan" }, { status: 400 });
     }
@@ -97,6 +100,7 @@ export async function POST(req: NextRequest) {
     const amountPaise = bp.priceInr * 100;
 
     if (isMock) {
+      console.log("[checkout] MOCK mode — returning mock order");
       return NextResponse.json({
         mock: true,
         orderId: `order_mock_${Math.random().toString(36).substring(2, 11)}`,
@@ -108,6 +112,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Call Razorpay Orders API for dynamic plans
+    console.log("[checkout] Calling Razorpay Orders API, keyId:", KEY_ID?.slice(0, 12) + "...", "amount:", amountPaise);
     try {
       const res = await fetch("https://api.razorpay.com/v1/orders", {
         method: "POST",
@@ -118,7 +123,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           amount: amountPaise,
           currency: "INR",
-          receipt: `sub_${userId}_${Date.now()}`,
+          receipt: `sub_${userId.slice(-8)}_${Date.now()}`.slice(0, 40),
           notes: {
             userId,
             plan: bp.name,
@@ -130,20 +135,23 @@ export async function POST(req: NextRequest) {
 
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("Razorpay order creation failed:", errorData);
+        console.error("[checkout] Razorpay order creation failed:", JSON.stringify(errorData));
         return NextResponse.json({ error: "Razorpay order creation failed" }, { status: 500 });
       }
 
       const order = await res.json();
+      console.log("[checkout] Razorpay order created:", order.id);
       return NextResponse.json({
         mock: false,
         keyId: KEY_ID,
         orderId: order.id,
         amount: order.amount,
         currency: order.currency,
+        plan: bp.name,
+        credits: bp.credits,
       });
     } catch (e) {
-      console.error(e);
+      console.error("[checkout] Razorpay connection error:", e);
       return NextResponse.json({ error: "Razorpay connection error" }, { status: 500 });
     }
   }
