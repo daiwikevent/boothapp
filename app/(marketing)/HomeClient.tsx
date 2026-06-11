@@ -139,32 +139,6 @@ const STATS = [
   { value: "9", label: "Free Credits" },
 ];
 
-function HoverCard({ children, style, hoverStyle }: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-  hoverStyle?: React.CSSProperties;
-}) {
-  return (
-    <div
-      style={style}
-      onMouseEnter={(e) => {
-        if (hoverStyle) {
-          Object.assign((e.currentTarget as HTMLElement).style, hoverStyle);
-        }
-      }}
-      onMouseLeave={(e) => {
-        // Reset to base style properties that might have been changed
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = (style as { borderColor?: string })?.borderColor || "";
-        el.style.transform = "";
-        el.style.boxShadow = "";
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 export default function HomeClient({ plans = [], userEmail = null, currentPlan = null }: Partial<Props>) {
   const router = useRouter();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -745,7 +719,7 @@ export default function HomeClient({ plans = [], userEmail = null, currentPlan =
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24 }}>
-              {HOW_IT_WORKS.map((step, i) => (
+              {HOW_IT_WORKS.map((step) => (
                 <div
                   key={step.step}
                   className="hiw-hover-card"

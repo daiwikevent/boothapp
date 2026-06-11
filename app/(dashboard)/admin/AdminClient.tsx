@@ -1100,7 +1100,7 @@ export default function AdminClient({
                 {creditPacks.length === 0 && (
                   <tr>
                     <td colSpan={6} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>
-                      No credit packs yet. Click "Add Credit Pack" to create one.
+                      No credit packs yet. Click &quot;Add Credit Pack&quot; to create one.
                     </td>
                   </tr>
                 )}
