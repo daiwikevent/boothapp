@@ -12,7 +12,10 @@
 
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { getAppSettings } from "@/lib/app-settings";
+import { sendVerificationEmail } from "@/lib/mail";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -60,11 +63,11 @@ export async function POST(req: Request) {
     // ── Create user ────────────────────────────────────────────────────────
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-    const smtpConfigured = !!(
-      process.env.SMTP_HOST &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS
-    );
+    const settings = await getAppSettings();
+    const smtpHost = settings.smtp_host || process.env.SMTP_HOST;
+    const smtpUser = settings.smtp_user || process.env.SMTP_USER;
+    const smtpPass = settings.smtp_pass || process.env.SMTP_PASS;
+    const smtpConfigured = !!(smtpHost && smtpUser && smtpPass);
 
     const user = await prisma.user.create({
       data: {
@@ -79,12 +82,23 @@ export async function POST(req: Request) {
 
     // ── Email verification (production) ────────────────────────────────────
     if (smtpConfigured) {
-      // TODO T03-SMTP: Generate verification token and send email
-      // For now, the user needs to be verified manually or via a future
-      // /api/auth/verify endpoint
-      console.log(
-        `📧 SMTP is configured — email verification should be sent to ${normalizedEmail}`
-      );
+      // Generate email verification token (valid for 24 hours)
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await prisma.verificationToken.create({
+        data: {
+          userId: user.id,
+          token,
+          type: "EMAIL_VERIFY",
+          expiresAt,
+        },
+      });
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      await sendVerificationEmail(normalizedEmail, token, appUrl);
+
+      console.log(`📧 Verification email sent to ${normalizedEmail}`);
     } else {
       console.log(
         `✅ Auto-verified ${normalizedEmail} (no SMTP configured — local dev mode)`
@@ -93,7 +107,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        message: "Account created successfully",
+        message: smtpConfigured
+          ? "Account created successfully. Please check your email to verify your account."
+          : "Account created successfully",
         userId: user.id,
         verified: !!user.emailVerified,
       },

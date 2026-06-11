@@ -141,6 +141,11 @@ export default function AdminClient({
     razorpay_key_secret: "",
     razorpay_webhook_secret: "",
     active_model: "gemini-2.5-flash-image",
+    smtp_host: "",
+    smtp_port: "",
+    smtp_user: "",
+    smtp_pass: "",
+    mail_from: "",
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [savedSettings, setSavedSettings] = useState(false);
@@ -894,6 +899,84 @@ export default function AdminClient({
               </div>
 
 
+            </div>
+          </div>
+
+          {/* SMTP Email Settings Section */}
+          <div className="card" style={{ padding: "var(--space-6)" }}>
+            <h3 style={{ fontFamily: "var(--font-poppins), Poppins, sans-serif", fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: "var(--space-4)", display: "flex", alignItems: "center", gap: 8 }}>
+              📧 SMTP Transactional Email Settings
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
+                Used for sending verification links and password resets. Leave blank to log to console (mock mailer mode).
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">SMTP Host</label>
+                <input
+                  id="smtp-host"
+                  type="text"
+                  className="form-input"
+                  value={settings.smtp_host ?? ""}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, smtp_host: e.target.value }))}
+                  placeholder="smtp.brevo.com"
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">SMTP Port</label>
+                <input
+                  id="smtp-port"
+                  type="text"
+                  className="form-input"
+                  value={settings.smtp_port ?? ""}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, smtp_port: e.target.value }))}
+                  placeholder="587"
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">SMTP Username</label>
+                <input
+                  id="smtp-user"
+                  type="text"
+                  className="form-input"
+                  value={settings.smtp_user ?? ""}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, smtp_user: e.target.value }))}
+                  placeholder="username@domain.com"
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">SMTP Password</label>
+                <input
+                  id="smtp-pass"
+                  type="password"
+                  className="form-input"
+                  value={settings.smtp_pass ?? ""}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, smtp_pass: e.target.value }))}
+                  placeholder="••••••••••••"
+                  autoComplete="off"
+                  style={{ fontFamily: "monospace", fontSize: 13 }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Mail From (Sender Address)</label>
+                <input
+                  id="mail-from"
+                  type="text"
+                  className="form-input"
+                  value={settings.mail_from ?? ""}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, mail_from: e.target.value }))}
+                  placeholder="noreply@boothmagic.app"
+                  autoComplete="off"
+                />
+              </div>
             </div>
           </div>
 

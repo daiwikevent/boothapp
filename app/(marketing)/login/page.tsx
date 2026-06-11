@@ -7,19 +7,44 @@
 
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, type FormEvent, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const errorQuery = searchParams.get("error");
+  const successQuery = searchParams.get("success");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (errorQuery === "verify") {
+      setError("Please verify your email address to access the dashboard. Check your inbox for the link.");
+    } else if (errorQuery === "expired-token") {
+      setError("Your verification link has expired. Please sign up again.");
+    } else if (errorQuery === "invalid-token") {
+      setError("The verification link is invalid or has already been used.");
+    } else if (errorQuery === "verify-failed") {
+      setError("Email verification failed. Please try again.");
+    }
+
+    if (successQuery === "verified") {
+      setSuccessMsg("Email verified successfully! You can now sign in.");
+    } else if (successQuery === "password-reset") {
+      setSuccessMsg("Password reset successfully! Please log in with your new password.");
+    }
+  }, [errorQuery, successQuery]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccessMsg("");
     setLoading(true);
 
     try {
@@ -55,6 +80,28 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {/* Success banner */}
+        {successMsg && (
+          <div
+            style={{
+              padding: "var(--space-3) var(--space-4)",
+              background: "rgba(52, 211, 153, 0.08)",
+              border: "1px solid var(--success)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--success)",
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: "var(--space-4)",
+            }}
+            role="alert"
+          >
+            <span>✅</span>
+            <span>{successMsg}</span>
+          </div>
+        )}
+
         {/* Error banner */}
         {error && (
           <div className="auth-error" role="alert">
@@ -77,7 +124,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
             <label htmlFor="login-email" className="form-label">
-              Email
+              Email Address
             </label>
             <input
               id="login-email"
@@ -93,9 +140,14 @@ export default function LoginPage() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="login-password" className="form-label">
-              Password
-            </label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-2)" }}>
+              <label htmlFor="login-password" className="form-label" style={{ margin: 0 }}>
+                Password
+              </label>
+              <Link href="/forgot-password" style={{ fontSize: 12, color: "var(--primary)", textDecoration: "none" }}>
+                Forgot Password?
+              </Link>
+            </div>
             <input
               id="login-password"
               type="password"
@@ -134,5 +186,19 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="auth-page">
+        <div className="auth-card" style={{ display: "flex", justifyContent: "center", padding: 48 }}>
+          <div className="auth-spinner" />
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

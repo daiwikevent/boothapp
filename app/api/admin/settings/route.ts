@@ -15,7 +15,7 @@ import type { ScopedSession } from "@/lib/db-scoped";
 // Keys that should be masked (only show last 6 chars) when read back
 const SENSITIVE_KEYS = [
   "gemini_api_key", "openai_api_key", "fal_api_key", "replicate_api_key", "ideogram_api_key", "midjourney_api_key",
-  "razorpay_key_id", "razorpay_key_secret", "razorpay_webhook_secret"
+  "razorpay_key_id", "razorpay_key_secret", "razorpay_webhook_secret", "smtp_pass"
 ];
 
 function maskValue(key: string, value: string): string {
