@@ -1,9 +1,7 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { Plan } from "@prisma/client";
-
-const KEY_ID = process.env.RAZORPAY_KEY_ID;
-const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+import { getSetting } from "@/lib/app-settings";
 
 // Map for Top-up Packs: [credits, price in paise]
 const TOPUP_PACKS = [
@@ -22,6 +20,9 @@ const SUBSCRIPTION_PLANS: Record<Plan, { price: number; name: string }> = {
 };
 
 export async function POST(req: NextRequest) {
+  const KEY_ID = await getSetting("razorpay_key_id", "RAZORPAY_KEY_ID");
+  const KEY_SECRET = await getSetting("razorpay_key_secret", "RAZORPAY_KEY_SECRET");
+
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

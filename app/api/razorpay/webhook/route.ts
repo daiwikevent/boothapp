@@ -3,10 +3,10 @@ import { verifyWebhookSignature } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
 import { grantCredits } from "@/lib/credits";
 import { Plan } from "@prisma/client";
-
-const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
+import { getSetting } from "@/lib/app-settings";
 
 export async function POST(req: NextRequest) {
+  const RAZORPAY_WEBHOOK_SECRET = await getSetting("razorpay_webhook_secret", "RAZORPAY_WEBHOOK_SECRET");
   const bodyText = await req.text();
   const signature = req.headers.get("x-razorpay-signature");
 

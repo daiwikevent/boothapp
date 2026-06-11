@@ -5,7 +5,6 @@ import type { ScopedSession } from "@/lib/db-scoped";
 import { prisma } from "@/lib/prisma";
 import AdminClient from "./AdminClient";
 import type { Metadata } from "next";
-
 import { Plan } from "@prisma/client";
 
 export const metadata: Metadata = {
@@ -32,8 +31,17 @@ export default async function AdminPage() {
     },
   };
 
-  // Fetch system presets and all operator details server-side
-  const [presets, users] = await Promise.all([
+  // Fetch all system admin data concurrently
+  const [
+    presets,
+    users,
+    totalOperators,
+    totalEvents,
+    totalPhotos,
+    spentCreditsAgg,
+    recentPayments,
+    recentLedger,
+  ] = await Promise.all([
     listPresets(scoped),
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -44,6 +52,38 @@ export default async function AdminPage() {
         companyName: true,
         plan: true,
         createdAt: true,
+        emailVerified: true,
+      },
+    }),
+    prisma.user.count(),
+    prisma.event.count(),
+    prisma.photo.count(),
+    prisma.creditLedger.aggregate({
+      where: { delta: { lt: 0 } },
+      _sum: { delta: true },
+    }),
+    prisma.payment.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 15,
+      include: {
+        user: {
+          select: {
+            email: true,
+            displayName: true,
+          },
+        },
+      },
+    }),
+    prisma.creditLedger.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 15,
+      include: {
+        user: {
+          select: {
+            email: true,
+            displayName: true,
+          },
+        },
       },
     }),
   ]);
@@ -60,16 +100,51 @@ export default async function AdminPage() {
         companyName: u.companyName ?? "",
         plan: u.plan,
         createdAt: u.createdAt.toISOString(),
+        emailVerified: !!u.emailVerified,
         balance,
       };
     })
   );
+
+  // Format stats object
+  const stats = {
+    totalOperators,
+    totalEvents,
+    totalPhotos,
+    totalCreditsSpent: Math.abs(spentCreditsAgg._sum.delta ?? 0),
+  };
+
+  // Format recent payments logs
+  const paymentsLog = recentPayments.map((p) => ({
+    id: p.id,
+    userEmail: p.user?.email || "Unknown",
+    userDisplayName: p.user?.displayName || "",
+    razorpayPaymentId: p.razorpayPaymentId,
+    amountInr: p.amountInr / 100, // convert paise to INR
+    creditsGranted: p.creditsGranted,
+    type: p.type,
+    createdAt: p.createdAt.toISOString(),
+  }));
+
+  // Format ledger logs
+  const ledgerLog = recentLedger.map((l) => ({
+    id: l.id,
+    userEmail: l.user?.email || "Unknown",
+    userDisplayName: l.user?.displayName || "",
+    delta: l.delta,
+    reason: l.reason,
+    refId: l.refId || "",
+    createdAt: l.createdAt.toISOString(),
+  }));
 
   return (
     <div style={{ maxWidth: 1100 }}>
       <AdminClient
         initialSystemPresets={JSON.parse(JSON.stringify(systemPresets))}
         initialOperators={operators}
+        stats={stats}
+        paymentsLog={paymentsLog}
+        ledgerLog={ledgerLog}
       />
     </div>
   );
