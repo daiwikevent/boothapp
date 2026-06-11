@@ -97,6 +97,9 @@ export default function AdminClient({
     razorpay_key_id: "",
     razorpay_key_secret: "",
     razorpay_webhook_secret: "",
+    razorpay_plan_starter: "",
+    razorpay_plan_pro: "",
+    razorpay_plan_business: "",
     active_model: "gemini-2.5-flash-image",
   });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -717,6 +720,62 @@ export default function AdminClient({
                   autoComplete="off"
                   style={{ fontFamily: "monospace", fontSize: 13 }}
                 />
+              </div>
+
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "var(--space-4)", marginTop: "var(--space-2)" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+                  📦 Razorpay Subscription Plan IDs
+                </div>
+                
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span>Starter Plan ID</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>Starter plan ID from Razorpay</span>
+                    </label>
+                    <input
+                      id="razorpay-plan-starter"
+                      type="text"
+                      className="form-input"
+                      value={settings.razorpay_plan_starter ?? ""}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, razorpay_plan_starter: e.target.value }))}
+                      placeholder="e.g. plan_N3v8Y7mZk854N"
+                      style={{ fontFamily: "monospace", fontSize: 13 }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span>Pro Plan ID</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>Pro plan ID from Razorpay</span>
+                    </label>
+                    <input
+                      id="razorpay-plan-pro"
+                      type="text"
+                      className="form-input"
+                      value={settings.razorpay_plan_pro ?? ""}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, razorpay_plan_pro: e.target.value }))}
+                      placeholder="e.g. plan_N3v9P9mZk854N"
+                      style={{ fontFamily: "monospace", fontSize: 13 }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span>Business Plan ID</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>Business plan ID from Razorpay</span>
+                    </label>
+                    <input
+                      id="razorpay-plan-business"
+                      type="text"
+                      className="form-input"
+                      value={settings.razorpay_plan_business ?? ""}
+                      onChange={(e) => setSettings((prev) => ({ ...prev, razorpay_plan_business: e.target.value }))}
+                      placeholder="e.g. plan_N3vA01mZk854N"
+                      style={{ fontFamily: "monospace", fontSize: 13 }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

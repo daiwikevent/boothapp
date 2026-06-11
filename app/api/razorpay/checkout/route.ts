@@ -106,13 +106,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Find custom Razorpay plan ID from env variables
-    const razorpayPlanKey = `RAZORPAY_PLAN_${planId}`;
-    const razorpayPlanId = process.env[razorpayPlanKey];
+    // Find custom Razorpay plan ID from settings
+    const settingKey = `razorpay_plan_${planId.toLowerCase()}`;
+    const envKey = `RAZORPAY_PLAN_${planId.toUpperCase()}`;
+    const razorpayPlanId = await getSetting(settingKey, envKey);
 
     if (!razorpayPlanId) {
       return NextResponse.json(
-        { error: `Razorpay plan ID for ${planId} (${razorpayPlanKey}) is not configured on the server.` },
+        { error: `Razorpay plan ID for ${planId} (${settingKey}) is not configured on the server.` },
         { status: 500 }
       );
     }
