@@ -13,6 +13,10 @@ interface Photo {
   errorMsg: string | null;
   createdAt: string;
   expiresAt: string;
+  preset?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 interface Event {
@@ -417,6 +421,31 @@ export default function EventGalleryClient({ event, initialPhotos }: Props) {
                       >
                         {photo.shortCode}
                       </span>
+
+                      {/* Theme label */}
+                      {photo.preset?.name && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: 8,
+                            left: 8,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: "2px 8px",
+                            background: "rgba(0, 0, 0, 0.75)",
+                            color: "var(--text)",
+                            borderRadius: 4,
+                            border: "1px solid var(--border)",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            maxWidth: "95px",
+                          }}
+                          title={photo.preset.name}
+                        >
+                          🎨 {photo.preset.name}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -690,6 +719,11 @@ export default function EventGalleryClient({ event, initialPhotos }: Props) {
                 <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
                   Shortcode: <span style={{ color: "var(--primary)", fontWeight: 600 }}>{selectedPhoto.shortCode}</span> ·{" "}
                   Expires {new Date(selectedPhoto.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  {selectedPhoto.preset?.name && (
+                    <>
+                      {" "}· Theme: <span style={{ color: "var(--success)", fontWeight: 600 }}>{selectedPhoto.preset.name}</span>
+                    </>
+                  )}
                 </div>
               </div>
               <button

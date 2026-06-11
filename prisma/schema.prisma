@@ -119,6 +119,7 @@ model Preset {
   updatedAt    DateTime    @updatedAt
 
   eventPresets EventPreset[]
+  photos       Photo[]
 
   @@index([ownerId])
   @@map("presets")
@@ -156,6 +157,7 @@ model Photo {
   eventId        String
   event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   presetId       String?     // null if preset was deleted
+  preset         Preset?     @relation(fields: [presetId], references: [id], onDelete: SetNull)
   shortCode      String      @unique // nanoid ≥10 chars for /g/[shortCode]
   originalPath   String?     // relative to /data/storage/originals/
   outputPath     String?     // relative to /data/storage/outputs/

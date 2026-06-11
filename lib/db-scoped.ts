@@ -300,12 +300,13 @@ export async function getPhotoByShortCode(shortCode: string): Promise<Photo | nu
 export async function listEventPhotos(
   session: ScopedSession,
   eventId: string
-): Promise<Photo[]> {
+): Promise<(Photo & { preset: Preset | null })[]> {
   const event = await getEvent(session, eventId);
   if (!event) return [];
 
   return prisma.photo.findMany({
     where: { eventId, userId: session.user.id },
+    include: { preset: true },
     orderBy: { createdAt: "desc" },
   });
 }
