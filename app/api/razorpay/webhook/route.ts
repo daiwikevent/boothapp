@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/razorpay";
 import { prisma } from "@/lib/prisma";
 import { grantCredits } from "@/lib/credits";
-import { Plan } from "@prisma/client";
 import { getSetting } from "@/lib/app-settings";
 
 export async function POST(req: NextRequest) {
@@ -36,39 +35,101 @@ export async function POST(req: NextRequest) {
     const amountInr = payment.amount; // in paise
     const notes = payment.notes || {};
     const userId = notes.userId;
-    const creditsGranted = notes.packCredits ? parseInt(notes.packCredits) : 0;
 
-    if (!userId || !creditsGranted) {
-      console.warn("Webhook payment.captured: userId or packCredits missing in notes", notes);
-      return NextResponse.json({ ok: true, message: "Ignored due to missing notes" });
+    if (!userId) {
+      console.warn("Webhook payment.captured: userId missing in notes", notes);
+      return NextResponse.json({ ok: true, message: "Ignored due to missing userId" });
     }
 
-    try {
-      // 1. Grant credits (idempotent inside grantCredits)
-      const ledgerRow = await grantCredits(userId, creditsGranted, "TOPUP", paymentId);
-      
-      // 2. Create Payment row
-      if (ledgerRow) {
-        await prisma.payment.create({
-          data: {
+    const isSubscription = notes.type === "subscription" || !!notes.plan;
+
+    if (isSubscription) {
+      const planName = (notes.plan || "STARTER").toUpperCase();
+      const creditsGranted = notes.planCredits ? parseInt(notes.planCredits) : 54;
+
+      try {
+        // 1. Grant credits
+        const ledgerRow = await grantCredits(userId, creditsGranted, "SUBSCRIPTION_GRANT", paymentId);
+
+        // 2. Create Payment row
+        if (ledgerRow) {
+          await prisma.payment.create({
+            data: {
+              userId,
+              razorpayPaymentId: paymentId,
+              amountInr,
+              creditsGranted,
+              type: "SUBSCRIPTION",
+            },
+          });
+        }
+
+        // 3. Update User's active plan
+        await prisma.user.update({
+          where: { id: userId },
+          data: { plan: planName },
+        });
+
+        // 4. Upsert Subscription row
+        await prisma.subscription.upsert({
+          where: { razorpaySubId: `sub_order_${paymentId}` },
+          create: {
             userId,
-            razorpayPaymentId: paymentId,
-            amountInr,
-            creditsGranted,
-            type: "TOPUP",
+            razorpaySubId: `sub_order_${paymentId}`,
+            plan: planName,
+            status: "active",
+            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          },
+          update: {
+            status: "active",
+            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           },
         });
+
+        return NextResponse.json({ ok: true, received: true });
+      } catch (e: unknown) {
+        const err = e as { code?: string };
+        if (err.code === "P2002") {
+          return NextResponse.json({ ok: true, message: "Duplicate subscription charge" });
+        }
+        console.error("Webhook processing failed:", e);
+        return NextResponse.json({ error: "Internal processing error" }, { status: 500 });
+      }
+    } else {
+      // Standard credit top-up pack
+      const creditsGranted = notes.packCredits ? parseInt(notes.packCredits) : 0;
+      if (!creditsGranted) {
+        console.warn("Webhook payment.captured: packCredits missing in notes", notes);
+        return NextResponse.json({ ok: true, message: "Ignored due to missing credits" });
       }
 
-      return NextResponse.json({ ok: true, received: true });
-    } catch (e: unknown) {
-      const err = e as { code?: string };
-      // Handle unique constraint violations gracefully (duplicate webhooks)
-      if (err.code === "P2002") {
-        return NextResponse.json({ ok: true, message: "Duplicate event already processed" });
+      try {
+        // 1. Grant credits
+        const ledgerRow = await grantCredits(userId, creditsGranted, "TOPUP", paymentId);
+        
+        // 2. Create Payment row
+        if (ledgerRow) {
+          await prisma.payment.create({
+            data: {
+              userId,
+              razorpayPaymentId: paymentId,
+              amountInr,
+              creditsGranted,
+              type: "TOPUP",
+            },
+          });
+        }
+
+        return NextResponse.json({ ok: true, received: true });
+      } catch (e: unknown) {
+        const err = e as { code?: string };
+        // Handle unique constraint violations gracefully (duplicate webhooks)
+        if (err.code === "P2002") {
+          return NextResponse.json({ ok: true, message: "Duplicate event already processed" });
+        }
+        console.error("Webhook processing failed:", e);
+        return NextResponse.json({ error: "Internal processing error" }, { status: 500 });
       }
-      console.error("Webhook processing failed:", e);
-      return NextResponse.json({ error: "Internal processing error" }, { status: 500 });
     }
   }
 
@@ -78,7 +139,7 @@ export async function POST(req: NextRequest) {
     const subId = subscription.id;
     const paymentId = payment?.id ?? `sub-charge-${subId}-${Date.now()}`;
     const amountInr = payment?.amount ?? 0;
-    const planId = (subscription.notes?.plan ?? "STARTER").toUpperCase() as Plan;
+    const planName = (subscription.notes?.plan ?? "STARTER").toUpperCase();
     const userId = subscription.notes?.userId;
 
     if (!userId) {
@@ -86,13 +147,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, message: "Ignored due to missing userId" });
     }
 
-    const creditsMap: Record<Plan, number> = {
-      STARTER: 54,
-      PRO: 120,
-      BUSINESS: 240,
-      TRIAL: 0,
-    };
-    const creditsGranted = creditsMap[planId] ?? 0;
+    // Dynamic credits lookup
+    let creditsGranted = 0;
+    try {
+      const bp = await prisma.billingPlan.findUnique({ where: { name: planName } });
+      if (bp) {
+        creditsGranted = bp.credits;
+      } else {
+        const fallbackMap: Record<string, number> = {
+          STARTER: 54,
+          PRO: 120,
+          BUSINESS: 240,
+          TRIAL: 0,
+        };
+        creditsGranted = fallbackMap[planName] ?? 0;
+      }
+    } catch {
+      creditsGranted = 54;
+    }
 
     try {
       // 1. Grant credits
@@ -104,7 +176,7 @@ export async function POST(req: NextRequest) {
         create: {
           userId,
           razorpaySubId: subId,
-          plan: planId,
+          plan: planName,
           status: "active",
           currentPeriodEnd: new Date(subscription.current_end * 1000),
         },
@@ -117,7 +189,7 @@ export async function POST(req: NextRequest) {
       // 3. Update User's active plan
       await prisma.user.update({
         where: { id: userId },
-        data: { plan: planId },
+        data: { plan: planName },
       });
 
       // 4. Create Payment row

@@ -12,6 +12,13 @@ declare module "next-auth" {
       plan: string;
       isAdmin: boolean;
       isVerified: boolean;
+      features?: {
+        hasCustomPresets: boolean;
+        hasCustomLogo: boolean;
+        hasNoWatermark: boolean;
+        hasCsvReports: boolean;
+        hasAttendantPin: boolean;
+      };
     };
   }
 
@@ -28,5 +35,12 @@ declare module "next-auth/jwt" {
     plan: string;
     isAdmin: boolean;
     isVerified: boolean;
+    features?: {
+      hasCustomPresets: boolean;
+      hasCustomLogo: boolean;
+      hasNoWatermark: boolean;
+      hasCsvReports: boolean;
+      hasAttendantPin: boolean;
+    };
   }
 }

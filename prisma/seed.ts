@@ -238,6 +238,98 @@ async function main() {
 
   const count = await prisma.preset.count({ where: { ownerId: null } });
   console.log(`\n✨ Done — ${count} system presets in database.`);
+
+  console.log("\n🌱 Seeding billing plans...\n");
+  const DEFAULT_PLANS = [
+    {
+      name: "STARTER",
+      label: "Starter",
+      priceInr: 799,
+      credits: 54,
+      features: [
+        "~18 AI photos/month",
+        "Indian + Universal System Presets",
+        "Basic Operator Dashboard",
+        "Watermark on output image",
+        "Email support",
+      ],
+      hasCustomPresets: false,
+      hasCustomLogo: false,
+      hasNoWatermark: false,
+      hasCsvReports: false,
+      hasAttendantPin: false,
+    },
+    {
+      name: "PRO",
+      label: "Pro",
+      priceInr: 1599,
+      credits: 120,
+      features: [
+        "~40 AI photos/month",
+        "Custom style presets (create own prompts)",
+        "Live slideshow public page",
+        "Watermark on output image",
+        "Print support (4x6 layout)",
+        "Attendant PIN lock settings",
+      ],
+      hasCustomPresets: true,
+      hasCustomLogo: false,
+      hasNoWatermark: false,
+      hasCsvReports: false,
+      hasAttendantPin: true,
+    },
+    {
+      name: "BUSINESS",
+      label: "Business",
+      priceInr: 2999,
+      credits: 240,
+      features: [
+        "~80 AI photos/month",
+        "NO brand watermark (White-label)",
+        "Custom operator logo overlay",
+        "CSV usage reports export",
+        "Priority WhatsApp support",
+      ],
+      hasCustomPresets: true,
+      hasCustomLogo: true,
+      hasNoWatermark: true,
+      hasCsvReports: true,
+      hasAttendantPin: true,
+    },
+  ];
+
+  for (const plan of DEFAULT_PLANS) {
+    const result = await prisma.billingPlan.upsert({
+      where: { name: plan.name },
+      update: {
+        label: plan.label,
+        priceInr: plan.priceInr,
+        credits: plan.credits,
+        features: plan.features,
+        hasCustomPresets: plan.hasCustomPresets,
+        hasCustomLogo: plan.hasCustomLogo,
+        hasNoWatermark: plan.hasNoWatermark,
+        hasCsvReports: plan.hasCsvReports,
+        hasAttendantPin: plan.hasAttendantPin,
+      },
+      create: {
+        name: plan.name,
+        label: plan.label,
+        priceInr: plan.priceInr,
+        credits: plan.credits,
+        features: plan.features,
+        hasCustomPresets: plan.hasCustomPresets,
+        hasCustomLogo: plan.hasCustomLogo,
+        hasNoWatermark: plan.hasNoWatermark,
+        hasCsvReports: plan.hasCsvReports,
+        hasAttendantPin: plan.hasAttendantPin,
+        isActive: true,
+      },
+    });
+    console.log(`  ✅ Plan: ${result.label} (₹${result.priceInr})`);
+  }
+
+  console.log("\n✨ Database seeding completed successfully.");
 }
 
 main()

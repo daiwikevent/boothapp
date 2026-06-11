@@ -6,63 +6,22 @@ import { useRouter } from "next/navigation";
 interface Props {
   userEmail: string | null;
   currentPlan: string | null;
+  initialPlans: {
+    id: string;
+    name: string;
+    label: string;
+    priceInr: number;
+    credits: number;
+    features: string[];
+    isActive: boolean;
+  }[];
 }
 
-const PLANS = [
-  {
-    id: "STARTER",
-    name: "Starter",
-    price: "₹799",
-    billing: "month",
-    credits: "54 monthly credits",
-    features: [
-      "~18 AI photos/month",
-      "Indian + Universal System Presets",
-      "Basic Operator Dashboard",
-      "Watermark on output image",
-      "Email support",
-    ],
-    highlight: false,
-    cta: "Get Starter",
-  },
-  {
-    id: "PRO",
-    name: "Pro",
-    price: "₹1,599",
-    billing: "month",
-    credits: "120 monthly credits",
-    features: [
-      "~40 AI photos/month",
-      "Custom style presets (create own prompts)",
-      "Live slideshow public page",
-      "Watermark on output image",
-      "Print support (4x6 layout)",
-      "Attendant PIN lock settings",
-    ],
-    highlight: true,
-    cta: "Go Pro",
-  },
-  {
-    id: "BUSINESS",
-    name: "Business",
-    price: "₹2,999",
-    billing: "month",
-    credits: "240 monthly credits",
-    features: [
-      "~80 AI photos/month",
-      "NO brand watermark (White-label)",
-      "Custom operator logo overlay",
-      "CSV usage reports export",
-      "Priority WhatsApp support",
-    ],
-    highlight: false,
-    cta: "Get Business",
-  },
-];
-
-export default function PricingClient({ userEmail, currentPlan }: Props) {
+export default function PricingClient({ userEmail, currentPlan, initialPlans }: Props) {
   const router = useRouter();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+
+  const plans = (initialPlans || []).filter(p => p.isActive);
 
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -74,18 +33,18 @@ export default function PricingClient({ userEmail, currentPlan }: Props) {
     });
   };
 
-  async function handleCheckout(planId: string) {
+  async function handleCheckout(planName: string) {
     if (!userEmail) {
       router.push(`/login?callbackUrl=/pricing`);
       return;
     }
 
-    setLoadingPlan(planId);
+    setLoadingPlan(planName);
     try {
       const res = await fetch("/api/razorpay/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "subscription", plan: planId }),
+        body: JSON.stringify({ type: "subscription", plan: planName }),
       });
 
       if (!res.ok) {
@@ -101,26 +60,27 @@ export default function PricingClient({ userEmail, currentPlan }: Props) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            event: "subscription.charged",
+            event: "payment.captured",
             payload: {
-              subscription: {
+              payment: {
                 entity: {
-                  id: data.subscriptionId,
-                  plan_id: data.plan,
-                  status: "active",
-                  current_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+                  id: data.orderId,
+                  amount: data.amount,
+                  status: "captured",
                   notes: {
                     userId: data.userId,
                     plan: data.plan,
-                  },
-                },
-              },
-            },
+                    planCredits: data.credits.toString(),
+                    type: "subscription"
+                  }
+                }
+              }
+            }
           }),
         });
 
         if (mockWebhookRes.ok) {
-          alert(`Mock subscription activated! Starter/Pro/Business credits granted.`);
+          alert(`Mock subscription activated! Credits and plan features granted.`);
           router.push("/dashboard");
           router.refresh();
         } else {
@@ -135,11 +95,13 @@ export default function PricingClient({ userEmail, currentPlan }: Props) {
 
         const options = {
           key: data.keyId,
-          subscription_id: data.subscriptionId,
+          amount: data.amount,
+          currency: "INR",
           name: "BoothMagic AI",
-          description: `Subscribe to ${planId} Plan`,
+          description: `Subscribe to ${planName} Plan`,
+          order_id: data.orderId,
           handler: function () {
-            alert("Payment successful! Your credits will land in a few moments.");
+            alert("Payment successful! Your plan has been upgraded and credits added.");
             router.push("/dashboard");
             router.refresh();
           },
@@ -172,23 +134,24 @@ export default function PricingClient({ userEmail, currentPlan }: Props) {
         marginTop: "var(--space-8)",
       }}
     >
-      {PLANS.map((plan) => {
-        const isActive = currentPlan === plan.id;
+      {plans.map((plan) => {
+        const isActive = currentPlan?.toUpperCase() === plan.name.toUpperCase();
+        const isHighlighted = plan.name === "PRO";
         return (
           <div
             key={plan.id}
-            className={`card ${plan.highlight ? "card-active" : ""}`}
+            className={`card ${isHighlighted ? "card-active" : ""}`}
             style={{
               display: "flex",
               flexDirection: "column",
               position: "relative",
               justifyContent: "space-between",
               padding: "var(--space-8)",
-              border: plan.highlight ? "2px solid var(--primary)" : "1px solid var(--border)",
-              transform: plan.highlight ? "scale(1.02)" : "none",
+              border: isHighlighted ? "2px solid var(--primary)" : "1px solid var(--border)",
+              transform: isHighlighted ? "scale(1.02)" : "none",
             }}
           >
-            {plan.highlight && (
+            {isHighlighted && (
               <span
                 style={{
                   position: "absolute",
@@ -209,13 +172,15 @@ export default function PricingClient({ userEmail, currentPlan }: Props) {
               </span>
             )}
             <div>
-              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{plan.name}</h3>
+              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{plan.label}</h3>
               <div style={{ display: "flex", alignItems: "baseline", marginBottom: 4 }}>
-                <span style={{ fontSize: 32, fontWeight: 800, color: "var(--text)" }}>{plan.price}</span>
-                <span style={{ fontSize: 14, color: "var(--text-muted)", marginLeft: 4 }}>/{plan.billing}</span>
+                <span style={{ fontSize: 32, fontWeight: 800, color: "var(--text)" }}>
+                  ₹{plan.priceInr.toLocaleString("en-IN")}
+                </span>
+                <span style={{ fontSize: 14, color: "var(--text-muted)", marginLeft: 4 }}>/month</span>
               </div>
               <div style={{ fontSize: 13, color: "var(--primary)", fontWeight: 600, marginBottom: 20 }}>
-                ⚡ {plan.credits}
+                ⚡ {plan.credits} monthly credits
               </div>
 
               <hr style={{ border: 0, borderTop: "1px solid var(--border)", marginBottom: 20 }} />
@@ -223,7 +188,7 @@ export default function PricingClient({ userEmail, currentPlan }: Props) {
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 24px 0", display: "flex", flexDirection: "column", gap: 10 }}>
                 {plan.features.map((feature, i) => (
                   <li key={i} style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 8, alignItems: "start" }}>
-                    <span style={{ color: feature.startsWith("NO") ? "var(--success)" : "var(--primary)", fontWeight: 600 }}>✓</span>
+                    <span style={{ color: feature.toUpperCase().startsWith("NO") ? "var(--success)" : "var(--primary)", fontWeight: 600 }}>✓</span>
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -231,12 +196,12 @@ export default function PricingClient({ userEmail, currentPlan }: Props) {
             </div>
 
             <button
-              onClick={() => handleCheckout(plan.id)}
+              onClick={() => handleCheckout(plan.name)}
               disabled={isActive || loadingPlan !== null}
-              className={`btn ${plan.highlight ? "btn-primary" : "btn-secondary"}`}
+              className={`btn ${isHighlighted ? "btn-primary" : "btn-secondary"}`}
               style={{ width: "100%", marginTop: "auto" }}
             >
-              {isActive ? "Current Plan" : loadingPlan === plan.id ? "Connecting..." : plan.cta}
+              {isActive ? "Current Plan" : loadingPlan === plan.name ? "Connecting..." : `Get ${plan.label}`}
             </button>
           </div>
         );

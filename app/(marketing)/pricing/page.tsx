@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { auth } from "@/auth";
 import PricingClient from "./PricingClient";
+import { getOrSeedBillingPlans } from "@/lib/plans";
 
 export const metadata: Metadata = {
   title: "Pricing | BoothMagic",
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 
 export default async function PricingPage() {
   const session = await auth();
+  const plans = await getOrSeedBillingPlans();
 
   return (
     <main className="min-h-screen px-6 py-24" style={{ background: "var(--bg)" }}>
@@ -25,6 +27,7 @@ export default async function PricingPage() {
         <PricingClient
           userEmail={session?.user?.email ?? null}
           currentPlan={session?.user?.plan ?? null}
+          initialPlans={JSON.parse(JSON.stringify(plans))}
         />
       </div>
     </main>

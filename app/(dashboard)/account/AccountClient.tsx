@@ -18,6 +18,13 @@ interface Props {
   countdownSecs: number;
   logoUrl: string | null;
   boothPin: string;
+  features?: {
+    hasCustomPresets: boolean;
+    hasCustomLogo: boolean;
+    hasNoWatermark: boolean;
+    hasCsvReports: boolean;
+    hasAttendantPin: boolean;
+  };
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -29,9 +36,9 @@ const PLAN_LABELS: Record<string, string> = {
 
 const PLAN_CREDITS: Record<string, string> = {
   TRIAL: "9 free credits",
-  STARTER: "200 credits/month",
-  PRO: "600 credits/month",
-  BUSINESS: "Unlimited credits",
+  STARTER: "54 credits",
+  PRO: "120 credits",
+  BUSINESS: "240 credits",
 };
 
 function creditColorVar(credits: number): string {
@@ -41,6 +48,7 @@ function creditColorVar(credits: number): string {
 }
 
 export default function AccountClient({
+  userId: _userId,
   email,
   credits,
   plan,
@@ -49,6 +57,7 @@ export default function AccountClient({
   countdownSecs,
   logoUrl: initialLogoUrl,
   boothPin: initialBoothPin,
+  features,
 }: Props) {
   const [name, setName] = useState(displayName);
   const [company, setCompany] = useState(companyName);
@@ -62,7 +71,7 @@ export default function AccountClient({
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState("");
   const [deletingLogo, setDeletingLogo] = useState(false);
-  const isProPlus = ["PRO", "BUSINESS"].includes(plan);
+  const isProPlus = features?.hasCustomLogo ?? ["PRO", "BUSINESS"].includes(plan);
   // T22: PIN state
   const [boothPin, setBoothPin] = useState(initialBoothPin);
   const [savingPin, setSavingPin] = useState(false);

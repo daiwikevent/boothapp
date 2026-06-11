@@ -1,8 +1,9 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { Plan, PeopleTag } from "@prisma/client";
+import { PeopleTag } from "@prisma/client";
 import { createPreset, listPresets } from "@/lib/db-scoped";
-import type { ScopedSession } from "@/lib/db-scoped";
+import type { ScopedSession, Plan } from "@/lib/db-scoped";
+import { hasFeature } from "@/lib/plans";
 
 const BLOCKED_WORDS = [
   "nudity", "naked", "sex", "porn", "violence", "kill", "murder", "blood", 
@@ -36,9 +37,9 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const plan = session.user.plan as Plan;
-  // Enforce Pro+ Plan Gate
-  if (plan !== "PRO" && plan !== "BUSINESS") {
+  const plan = session.user.plan ?? "TRIAL";
+  const canCustomPresets = await hasFeature(plan, "hasCustomPresets");
+  if (!canCustomPresets) {
     return NextResponse.json(
       { error: "Plan upgrade required. Custom presets are restricted to Pro & Business plans." },
       { status: 403 }

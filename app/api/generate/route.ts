@@ -26,6 +26,7 @@ import sharp from "sharp";
 import { nanoid } from "nanoid";
 import { getSetting } from "@/lib/app-settings";
 import { uploadToGoogleDriveBackground } from "@/lib/gdrive";
+import { hasFeature } from "@/lib/plans";
 
 const STORAGE_DIR = process.env.STORAGE_DIR ?? join(process.cwd(), "data", "storage");
 const GENERATE_TIMEOUT_MS = 45_000;
@@ -260,14 +261,16 @@ export async function POST(req: NextRequest) {
       .jpeg({ quality: 88 })
       .toBuffer();
 
-    // Watermark for TRIAL plan
-    if (!session.user.plan || session.user.plan === "TRIAL") {
+    // Watermark if the plan does NOT support removing the watermark
+    const plan = session.user.plan ?? "TRIAL";
+    const noWatermark = await hasFeature(plan, "hasNoWatermark");
+    if (!noWatermark) {
       outputBuffer = await addWatermark(outputBuffer);
     }
 
-    // T19: Stamp operator logo for Pro+ plans
-    const plan = session.user.plan ?? "TRIAL";
-    if (["PRO", "BUSINESS"].includes(plan)) {
+    // T19: Stamp operator logo for plans that support it
+    const canCustomLogo = await hasFeature(plan, "hasCustomLogo");
+    if (canCustomLogo) {
       const profile = await getProfile(scoped);
       if (profile?.logoUrl) {
         // Extract filename from URL like /api/files/logo/filename.png

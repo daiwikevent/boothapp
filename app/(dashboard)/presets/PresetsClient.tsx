@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import type { Preset, Plan, PeopleTag } from "@prisma/client";
+import type { Preset, PeopleTag } from "@prisma/client";
+import type { Plan } from "@/lib/db-scoped";
 
 interface Props {
   initialPresets: Preset[];
   currentPlan: Plan;
+  features?: {
+    hasCustomPresets: boolean;
+    hasCustomLogo: boolean;
+    hasNoWatermark: boolean;
+    hasCsvReports: boolean;
+    hasAttendantPin: boolean;
+  };
 }
 
 const TAG_LABELS: Record<string, string> = { SOLO: "Solo", COUPLE: "Couple", GROUP: "Group" };
@@ -33,7 +41,7 @@ const PRESET_EMOJIS: Record<string, string> = {
   "Monsoon Romance": "🌧️",
 };
 
-export default function PresetsClient({ initialPresets, currentPlan }: Props) {
+export default function PresetsClient({ initialPresets, currentPlan, features }: Props) {
   const [presets, setPresets] = useState<Preset[]>(initialPresets);
   const [editingPreset, setEditingPreset] = useState<Partial<Preset> | null>(null);
   const [savingPreset, setSavingPreset] = useState(false);
@@ -42,7 +50,7 @@ export default function PresetsClient({ initialPresets, currentPlan }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
-  const isProOrPlus = currentPlan === "PRO" || currentPlan === "BUSINESS";
+  const isProOrPlus = features?.hasCustomPresets ?? (currentPlan === "PRO" || currentPlan === "BUSINESS");
 
   // Group by people tag
   const grouped = presets.reduce<Record<string, Preset[]>>((acc, p) => {

@@ -1,10 +1,9 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { listPresets } from "@/lib/db-scoped";
-import type { ScopedSession } from "@/lib/db-scoped";
+import type { ScopedSession, Plan } from "@/lib/db-scoped";
 import type { Metadata } from "next";
 import PresetsClient from "./PresetsClient";
-import { Plan } from "@prisma/client";
 
 export const metadata: Metadata = {
   title: "Presets | BoothMagic",
@@ -32,6 +31,7 @@ export default async function PresetsPage() {
       <PresetsClient
         initialPresets={JSON.parse(JSON.stringify(presets))}
         currentPlan={plan}
+        features={session.user.features}
       />
     </div>
   );

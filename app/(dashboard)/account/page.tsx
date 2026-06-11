@@ -39,6 +39,7 @@ export default async function AccountPage() {
       countdownSecs={profile?.countdownSecs ?? 3}
       logoUrl={profile?.logoUrl ?? null}
       boothPin={profile?.boothPin ?? "0000"}
+      features={session.user.features}
     />
   );
 }

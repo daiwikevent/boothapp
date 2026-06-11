@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { PeopleTag, Plan } from "@prisma/client";
+import type { PeopleTag } from "@prisma/client";
+import type { Plan } from "@/lib/db-scoped";
 
 interface Preset {
   id: string;
@@ -52,12 +53,30 @@ interface LedgerLogEntry {
   createdAt: string;
 }
 
+interface BillingPlanType {
+  id?: string;
+  name: string;
+  label: string;
+  priceInr: number;
+  credits: number;
+  features: string[];
+  hasCustomPresets: boolean;
+  hasCustomLogo: boolean;
+  hasNoWatermark: boolean;
+  hasCsvReports: boolean;
+  hasAttendantPin: boolean;
+  isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
 interface Props {
   initialSystemPresets: Preset[];
   initialOperators: Operator[];
   stats: StatDetails;
   paymentsLog: PaymentLogEntry[];
   ledgerLog: LedgerLogEntry[];
+  initialBillingPlans: BillingPlanType[];
 }
 
 export default function AdminClient({
@@ -66,17 +85,19 @@ export default function AdminClient({
   stats,
   paymentsLog,
   ledgerLog,
+  initialBillingPlans,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<"operators" | "stats" | "presets" | "settings">("operators");
+  const [activeTab, setActiveTab] = useState<"operators" | "stats" | "presets" | "settings" | "plans">("operators");
   const [operators, setOperators] = useState<Operator[]>(initialOperators);
   const [presets, setPresets] = useState<Preset[]>(initialSystemPresets);
+  const [billingPlans, setBillingPlans] = useState<BillingPlanType[]>(initialBillingPlans || []);
 
   // Search filter
   const [search, setSearch] = useState("");
 
   // Manage Operator Modal states
   const [selectedOperator, setSelectedOperator] = useState<Operator | null>(null);
-  const [selectedOperatorPlan, setSelectedOperatorPlan] = useState<Plan>("TRIAL");
+  const [selectedOperatorPlan, setSelectedOperatorPlan] = useState<string>("TRIAL");
   const [selectedOperatorVerified, setSelectedOperatorVerified] = useState<boolean>(false);
   const [adjustAmount, setAdjustAmount] = useState<number>(0);
   const [updatingOperator, setUpdatingOperator] = useState(false);
@@ -85,6 +106,11 @@ export default function AdminClient({
   // Preset form states
   const [editingPreset, setEditingPreset] = useState<Partial<Preset> | null>(null);
   const [savingPreset, setSavingPreset] = useState(false);
+
+  // Dynamic Plans management states
+  const [editingPlan, setEditingPlan] = useState<Partial<BillingPlanType> | null>(null);
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [deletingPlan, setDeletingPlan] = useState(false);
 
   // Dynamic Settings (AI keys + Razorpay gateway settings)
   const [settings, setSettings] = useState<Record<string, string>>({
@@ -97,9 +123,6 @@ export default function AdminClient({
     razorpay_key_id: "",
     razorpay_key_secret: "",
     razorpay_webhook_secret: "",
-    razorpay_plan_starter: "",
-    razorpay_plan_pro: "",
-    razorpay_plan_business: "",
     active_model: "gemini-2.5-flash-image",
   });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -258,6 +281,76 @@ export default function AdminClient({
     }
   }
 
+  // Save & delete Billing Plans
+  async function handleSavePlan(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingPlan?.name || !editingPlan?.label) return;
+
+    setSavingPlan(true);
+    try {
+      const res = await fetch("/api/admin/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingPlan.id,
+          name: editingPlan.name.toUpperCase().trim(),
+          label: editingPlan.label.trim(),
+          priceInr: Number(editingPlan.priceInr),
+          credits: Number(editingPlan.credits),
+          features: (editingPlan.features || []).map((f: string) => f.trim()).filter(Boolean),
+          hasCustomPresets: !!editingPlan.hasCustomPresets,
+          hasCustomLogo: !!editingPlan.hasCustomLogo,
+          hasNoWatermark: !!editingPlan.hasNoWatermark,
+          hasCsvReports: !!editingPlan.hasCsvReports,
+          hasAttendantPin: !!editingPlan.hasAttendantPin,
+          isActive: !!editingPlan.isActive,
+        }),
+      });
+
+      if (res.ok) {
+        const saved = await res.json();
+        if (editingPlan.id) {
+          setBillingPlans((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+        } else {
+          setBillingPlans((prev) => [...prev, saved]);
+        }
+        setEditingPlan(null);
+      } else {
+        const d = await res.json();
+        alert(d.error || "Failed to save billing plan.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Network error saving billing plan.");
+    } finally {
+      setSavingPlan(false);
+    }
+  }
+
+  async function handleDeletePlan(planId: string) {
+    if (!confirm("Are you sure you want to delete this billing plan?")) return;
+
+    setDeletingPlan(true);
+    try {
+      const res = await fetch(`/api/admin/plans?id=${planId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setBillingPlans((prev) => prev.filter((p) => p.id !== planId));
+        alert("Billing plan deleted successfully.");
+      } else {
+        const d = await res.json();
+        alert(d.error || "Failed to delete billing plan.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Network error deleting billing plan.");
+    } finally {
+      setDeletingPlan(false);
+    }
+  }
+
   // Save Config Settings (AI keys + Razorpay settings)
   async function handleSaveSettings() {
     setSavingSettings(true);
@@ -321,8 +414,9 @@ export default function AdminClient({
             { id: "operators", label: "👥 Operator Accounts" },
             { id: "stats", label: "📈 Stats & Transactions" },
             { id: "presets", label: "🎨 System Presets" },
+            { id: "plans", label: "💳 Billing Plans" },
             { id: "settings", label: "⚙️ App Settings" },
-          ] as { id: "operators" | "stats" | "presets" | "settings"; label: string }[]
+          ] as { id: "operators" | "stats" | "presets" | "settings" | "plans"; label: string }[]
         ).map((t) => (
           <button
             key={t.id}
@@ -722,61 +816,7 @@ export default function AdminClient({
                 />
               </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "var(--space-4)", marginTop: "var(--space-2)" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
-                  📦 Razorpay Subscription Plan IDs
-                </div>
-                
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Starter Plan ID</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>Starter plan ID from Razorpay</span>
-                    </label>
-                    <input
-                      id="razorpay-plan-starter"
-                      type="text"
-                      className="form-input"
-                      value={settings.razorpay_plan_starter ?? ""}
-                      onChange={(e) => setSettings((prev) => ({ ...prev, razorpay_plan_starter: e.target.value }))}
-                      placeholder="e.g. plan_N3v8Y7mZk854N"
-                      style={{ fontFamily: "monospace", fontSize: 13 }}
-                    />
-                  </div>
 
-                  <div className="form-group">
-                    <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Pro Plan ID</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>Pro plan ID from Razorpay</span>
-                    </label>
-                    <input
-                      id="razorpay-plan-pro"
-                      type="text"
-                      className="form-input"
-                      value={settings.razorpay_plan_pro ?? ""}
-                      onChange={(e) => setSettings((prev) => ({ ...prev, razorpay_plan_pro: e.target.value }))}
-                      placeholder="e.g. plan_N3v9P9mZk854N"
-                      style={{ fontFamily: "monospace", fontSize: 13 }}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Business Plan ID</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>Business plan ID from Razorpay</span>
-                    </label>
-                    <input
-                      id="razorpay-plan-business"
-                      type="text"
-                      className="form-input"
-                      value={settings.razorpay_plan_business ?? ""}
-                      onChange={(e) => setSettings((prev) => ({ ...prev, razorpay_plan_business: e.target.value }))}
-                      placeholder="e.g. plan_N3vA01mZk854N"
-                      style={{ fontFamily: "monospace", fontSize: 13 }}
-                    />
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -791,6 +831,111 @@ export default function AdminClient({
               {savingSettings ? "Saving…" : "💾 Save System Settings"}
             </button>
             {savedSettings && <span style={{ color: "var(--success)", fontWeight: 600 }}>✓ Saved — active immediately</span>}
+          </div>
+        </div>
+      )}
+
+      {/* 5. Billing Plans CRUD Tab */}
+      {activeTab === "plans" && (
+        <div>
+          {/* Header & Add Button */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-6)" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
+              Manage dynamic pricing plans, credit limits, features, and gated feature permissions.
+            </p>
+            <button
+              onClick={() => setEditingPlan({
+                name: "",
+                label: "",
+                priceInr: 0,
+                credits: 0,
+                features: [],
+                hasCustomPresets: false,
+                hasCustomLogo: false,
+                hasNoWatermark: false,
+                hasCsvReports: false,
+                hasAttendantPin: false,
+                isActive: true,
+              })}
+              className="btn btn-primary btn-sm"
+            >
+              ➕ Add New Plan
+            </button>
+          </div>
+
+          {/* Plans list */}
+          <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, textAlign: "left" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-muted)" }}>
+                  <th style={{ padding: "12px 16px" }}>Plan Details</th>
+                  <th style={{ padding: "12px 16px" }}>Price (INR)</th>
+                  <th style={{ padding: "12px 16px" }}>Credits Granted</th>
+                  <th style={{ padding: "12px 16px" }}>Feature Flags</th>
+                  <th style={{ padding: "12px 16px" }}>Status</th>
+                  <th style={{ padding: "12px 16px", textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billingPlans.map((bp) => (
+                  <tr key={bp.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", verticalAlign: "middle" }}>
+                    <td style={{ padding: "16px" }}>
+                      <div style={{ fontWeight: 600, color: "var(--text)" }}>{bp.label}</div>
+                      <div style={{ color: "var(--text-muted)", fontSize: 11 }}>Code: {bp.name}</div>
+                    </td>
+                    <td style={{ padding: "16px", color: "var(--text)", fontWeight: 600 }}>
+                      ₹{bp.priceInr.toLocaleString("en-IN")}
+                    </td>
+                    <td style={{ padding: "16px", color: "var(--primary)", fontWeight: 600 }}>
+                      ⚡ {bp.credits} credits
+                    </td>
+                    <td style={{ padding: "16px" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {bp.hasCustomPresets && <span className="tag tag-blue" style={{ fontSize: 10, background: "rgba(59, 130, 246, 0.15)", color: "#60a5fa", padding: "2px 6px", borderRadius: 4 }}>Presets</span>}
+                        {bp.hasCustomLogo && <span className="tag tag-purple" style={{ fontSize: 10, background: "rgba(139, 92, 246, 0.15)", color: "#a78bfa", padding: "2px 6px", borderRadius: 4 }}>Logo</span>}
+                        {bp.hasNoWatermark && <span className="tag tag-green" style={{ fontSize: 10, background: "rgba(16, 185, 129, 0.15)", color: "#34d399", padding: "2px 6px", borderRadius: 4 }}>No-Watermark</span>}
+                        {bp.hasCsvReports && <span className="tag tag-yellow" style={{ fontSize: 10, background: "rgba(245, 158, 11, 0.15)", color: "#fbbf24", padding: "2px 6px", borderRadius: 4 }}>CSV</span>}
+                        {bp.hasAttendantPin && <span className="tag tag-orange" style={{ fontSize: 10, background: "rgba(249, 115, 22, 0.15)", color: "#fb923c", padding: "2px 6px", borderRadius: 4 }}>PIN</span>}
+                      </div>
+                    </td>
+                    <td style={{ padding: "16px" }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "2px 8px",
+                          borderRadius: 4,
+                          background: bp.isActive ? "rgba(52, 211, 153, 0.12)" : "rgba(248, 113, 113, 0.12)",
+                          color: bp.isActive ? "var(--success)" : "var(--error)",
+                        }}
+                      >
+                        {bp.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "16px", textAlign: "right" }}>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() => setEditingPlan(bp)}
+                          className="btn btn-secondary btn-xs"
+                          style={{ padding: "4px 8px", fontSize: 12 }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeletePlan(bp.id || "")}
+                          disabled={["STARTER", "PRO", "BUSINESS"].includes(bp.name) || deletingPlan}
+                          className="btn btn-danger btn-xs"
+                          style={{ padding: "4px 8px", fontSize: 12 }}
+                          title={["STARTER", "PRO", "BUSINESS"].includes(bp.name) ? "System default plans cannot be deleted" : "Delete Plan"}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -838,12 +983,12 @@ export default function AdminClient({
                 <select
                   className="form-input"
                   value={selectedOperatorPlan}
-                  onChange={(e) => setSelectedOperatorPlan(e.target.value as Plan)}
+                  onChange={(e) => setSelectedOperatorPlan(e.target.value)}
                 >
                   <option value="TRIAL">Trial (Free)</option>
-                  <option value="STARTER">Starter</option>
-                  <option value="PRO">Pro</option>
-                  <option value="BUSINESS">Business</option>
+                  {billingPlans.map((bp) => (
+                    <option key={bp.id} value={bp.name}>{bp.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -1031,14 +1176,14 @@ export default function AdminClient({
                     onChange={(e) =>
                       setEditingPreset((prev) => ({
                         ...prev,
-                        planRequired: (e.target.value || null) as Plan | null,
+                        planRequired: e.target.value || null,
                       }))
                     }
                   >
                     <option value="">All Tiers</option>
-                    <option value="STARTER">Starter+</option>
-                    <option value="PRO">Pro+</option>
-                    <option value="BUSINESS">Business only</option>
+                    {billingPlans.map((bp) => (
+                      <option key={bp.id} value={bp.name}>{bp.label}+</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1072,6 +1217,192 @@ export default function AdminClient({
                 </button>
                 <button type="submit" className="btn btn-primary btn-sm" disabled={savingPreset}>
                   {savingPreset ? "Saving..." : "Save Preset"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {editingPlan && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.7)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingPlan(null);
+          }}
+        >
+          <div className="card" style={{ width: "100%", maxWidth: 520, padding: "var(--space-8)", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-4)" }}>
+              <div>
+                <h2 style={{ fontFamily: "var(--font-poppins), Poppins, sans-serif", fontSize: 18, fontWeight: 700 }}>
+                  {editingPlan.id ? "Edit Billing Plan" : "Add Billing Plan"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPlan(null)}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlan} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+              <div className="form-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
+                <div className="form-group">
+                  <label className="form-label">Plan Name ID (Uppercase)</label>
+                  <input
+                    type="text"
+                    required
+                    disabled={!!editingPlan.id && ["STARTER", "PRO", "BUSINESS"].includes(editingPlan.name || "")}
+                    className="form-input"
+                    value={editingPlan.name || ""}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, name: e.target.value.toUpperCase().replace(/\s+/g, "_") } : null)}
+                    placeholder="e.g. VIP"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Display Label</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-input"
+                    value={editingPlan.label || ""}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, label: e.target.value } : null)}
+                    placeholder="e.g. Premium VIP"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
+                <div className="form-group">
+                  <label className="form-label">Price (INR)</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    className="form-input"
+                    value={editingPlan.priceInr || 0}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, priceInr: parseInt(e.target.value) || 0 } : null)}
+                    placeholder="799"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Credits Granted</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    className="form-input"
+                    value={editingPlan.credits || 0}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, credits: parseInt(e.target.value) || 0 } : null)}
+                    placeholder="54"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Features list (One per line)</label>
+                <textarea
+                  className="form-input"
+                  rows={4}
+                  value={Array.isArray(editingPlan.features) ? editingPlan.features.join("\n") : ""}
+                  onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, features: e.target.value.split("\n") } : null)}
+                  placeholder="Universal Style Presets&#10;Watermark on output image&#10;Custom operator logo overlay"
+                  style={{ fontFamily: "inherit" }}
+                />
+              </div>
+
+              {/* Toggles */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", background: "var(--surface-2)", padding: "var(--space-4)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>
+                  Unlocked System Features
+                </div>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "4px 0" }}>
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>Allow Custom Style Presets</span>
+                  <input
+                    type="checkbox"
+                    checked={!!editingPlan.hasCustomPresets}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, hasCustomPresets: e.target.checked } : null)}
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "4px 0" }}>
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>Allow Custom Logo Overlay</span>
+                  <input
+                    type="checkbox"
+                    checked={!!editingPlan.hasCustomLogo}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, hasCustomLogo: e.target.checked } : null)}
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "4px 0" }}>
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>Remove Brand Watermark</span>
+                  <input
+                    type="checkbox"
+                    checked={!!editingPlan.hasNoWatermark}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, hasNoWatermark: e.target.checked } : null)}
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "4px 0" }}>
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>Allow CSV Usage Reports</span>
+                  <input
+                    type="checkbox"
+                    checked={!!editingPlan.hasCsvReports}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, hasCsvReports: e.target.checked } : null)}
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "4px 0" }}>
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>Allow Attendant PIN Lock</span>
+                  <input
+                    type="checkbox"
+                    checked={!!editingPlan.hasAttendantPin}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, hasAttendantPin: e.target.checked } : null)}
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "4px 0", borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Visible / Active Plan</span>
+                  <input
+                    type="checkbox"
+                    checked={!!editingPlan.isActive}
+                    onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, isActive: e.target.checked } : null)}
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-3)", marginTop: "var(--space-2)" }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingPlan(null)}
+                  className="btn btn-secondary"
+                  disabled={savingPlan}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingPlan}
+                >
+                  {savingPlan ? "Saving..." : "Save Plan"}
                 </button>
               </div>
             </form>

@@ -21,9 +21,10 @@ import type {
   User,
   EventPreset,
   Subscription,
-  Plan,
   PeopleTag,
 } from "@prisma/client";
+
+export type Plan = string;
 
 // ─── Session type ─────────────────────────────────────────────────────────────
 

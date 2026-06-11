@@ -16,11 +16,12 @@ import type { ScopedSession } from "@/lib/db-scoped";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join, extname } from "path";
 
+import { hasFeature } from "@/lib/plans";
+
 const STORAGE_DIR = process.env.STORAGE_DIR ?? join(process.cwd(), "data", "storage");
 const LOGOS_DIR = join(STORAGE_DIR, "logos");
 const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
-const PRO_PLANS = ["PRO", "BUSINESS"];
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -28,9 +29,10 @@ export async function POST(req: NextRequest) {
 
   // Plan check — Pro+ only
   const plan = session.user.plan ?? "TRIAL";
-  if (!PRO_PLANS.includes(plan)) {
+  const canCustomLogo = await hasFeature(plan, "hasCustomLogo");
+  if (!canCustomLogo) {
     return NextResponse.json(
-      { error: "Logo upload requires Pro or Business plan" },
+      { error: "Logo upload requires a plan that supports custom branding" },
       { status: 403 }
     );
   }

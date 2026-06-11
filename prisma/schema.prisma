@@ -28,7 +28,7 @@ model User {
   companyName   String?
   country       String   @default("IN")
   logoUrl       String?
-  plan          Plan     @default(TRIAL)
+  plan          String   @default("TRIAL")
   isAdmin       Boolean  @default(false) // internal admin flag, checked server-side only
   countdownSecs Int      @default(3)     // booth countdown (1–10)
   boothPin      String   @default("0000") // T22: 4-digit PIN for booth settings lock
@@ -68,12 +68,7 @@ enum TokenType {
   PASSWORD_RESET
 }
 
-enum Plan {
-  TRIAL
-  STARTER
-  PRO
-  BUSINESS
-}
+
 
 // ============================================================
 // EVENTS
@@ -113,7 +108,7 @@ model Preset {
   peopleTag    PeopleTag   @default(SOLO)
   thumbnailUrl String?
   isActive     Boolean     @default(true)
-  planRequired Plan?       // NULL = all plans; STARTER/PRO/BUSINESS = gated
+  planRequired String?     // NULL = all plans; gated by plan name
   sortOrder    Int         @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -216,7 +211,7 @@ model Subscription {
   userId               String
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   razorpaySubId        String   @unique
-  plan                 Plan
+  plan                 String
   status               String   // active | cancelled | expired
   currentPeriodEnd     DateTime
   createdAt            DateTime @default(now())
@@ -257,4 +252,23 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")
+}
+
+model BillingPlan {
+  id                 String   @id @default(cuid())
+  name               String   @unique // e.g. "STARTER", "PRO", "BUSINESS", "VIP"
+  label              String   // e.g. "Starter Plan", "Pro Plan"
+  priceInr           Int      // Price in INR (integer, e.g. 799, 1599, etc.)
+  credits            Int      // Number of credits credited
+  features           String[] // array of user-facing features (strings)
+  hasCustomPresets   Boolean  @default(false)
+  hasCustomLogo      Boolean  @default(false)
+  hasNoWatermark     Boolean  @default(false)
+  hasCsvReports      Boolean  @default(false)
+  hasAttendantPin    Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("billing_plans")
 }

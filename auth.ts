@@ -81,6 +81,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.plan = dbUser.plan;
           token.isAdmin = dbUser.isAdmin;
           token.isVerified = !!dbUser.emailVerified;
+
+          // Fetch plan features
+          const planDetails = await prisma.billingPlan.findUnique({
+            where: { name: dbUser.plan }
+          });
+          token.features = {
+            hasCustomPresets: planDetails?.hasCustomPresets ?? false,
+            hasCustomLogo: planDetails?.hasCustomLogo ?? false,
+            hasNoWatermark: planDetails?.hasNoWatermark ?? false,
+            hasCsvReports: planDetails?.hasCsvReports ?? false,
+            hasAttendantPin: planDetails?.hasAttendantPin ?? false,
+          };
         }
       }
       return token;
@@ -91,6 +103,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.plan = token.plan as string;
         session.user.isAdmin = token.isAdmin as boolean;
         session.user.isVerified = token.isVerified as boolean;
+        session.user.features = token.features as any;
       }
       return session;
     },

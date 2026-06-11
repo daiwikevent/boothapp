@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { assertAdmin, upsertSystemPreset } from "@/lib/db-scoped";
 
-import { Plan } from "@prisma/client";
+import { Plan } from "@/lib/db-scoped";
 
 export async function POST(req: NextRequest) {
   const session = await auth();

@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertAdmin, getBalanceForUser } from "@/lib/db-scoped";
-import { Plan } from "@prisma/client";
+import { Plan } from "@/lib/db-scoped";
 
 async function verifyAdminSession() {
   const session = await auth();

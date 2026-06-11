@@ -1,11 +1,11 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { listPresets, getBalanceForUser } from "@/lib/db-scoped";
-import type { ScopedSession } from "@/lib/db-scoped";
+import type { ScopedSession, Plan } from "@/lib/db-scoped";
 import { prisma } from "@/lib/prisma";
 import AdminClient from "./AdminClient";
 import type { Metadata } from "next";
-import { Plan } from "@prisma/client";
+import { getOrSeedBillingPlans } from "@/lib/plans";
 
 export const metadata: Metadata = {
   title: "Admin Panel | BoothMagic",
@@ -41,6 +41,7 @@ export default async function AdminPage() {
     spentCreditsAgg,
     recentPayments,
     recentLedger,
+    billingPlans,
   ] = await Promise.all([
     listPresets(scoped),
     prisma.user.findMany({
@@ -86,6 +87,7 @@ export default async function AdminPage() {
         },
       },
     }),
+    getOrSeedBillingPlans(),
   ]);
 
   const systemPresets = presets.filter((p) => !p.ownerId);
@@ -145,6 +147,7 @@ export default async function AdminPage() {
         stats={stats}
         paymentsLog={paymentsLog}
         ledgerLog={ledgerLog}
+        initialBillingPlans={JSON.parse(JSON.stringify(billingPlans))}
       />
     </div>
   );

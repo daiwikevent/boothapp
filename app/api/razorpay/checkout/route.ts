@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { Plan } from "@prisma/client";
 import { getSetting } from "@/lib/app-settings";
+import { prisma } from "@/lib/prisma";
 
 // Map for Top-up Packs: [credits, price in paise]
 const TOPUP_PACKS = [
@@ -10,14 +10,6 @@ const TOPUP_PACKS = [
   { credits: 700, price: 799900 },
   { credits: 1500, price: 1499900 },
 ];
-
-// Map for Subscriptions: plan -> price in paise
-const SUBSCRIPTION_PLANS: Record<Plan, { price: number; name: string }> = {
-  TRIAL: { price: 0, name: "Trial" },
-  STARTER: { price: 79900, name: "Starter" },
-  PRO: { price: 159900, name: "Pro" },
-  BUSINESS: { price: 299900, name: "Business" },
-};
 
 export async function POST(req: NextRequest) {
   const KEY_ID = await getSetting("razorpay_key_id", "RAZORPAY_KEY_ID");
@@ -90,64 +82,65 @@ export async function POST(req: NextRequest) {
   }
 
   if (type === "subscription") {
-    const planId = (plan as string).toUpperCase() as Plan;
-    const planConfig = SUBSCRIPTION_PLANS[planId];
-    if (!planConfig || planId === "TRIAL") {
-      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+    const planName = (plan as string).toUpperCase();
+    if (planName === "TRIAL") {
+      return NextResponse.json({ error: "Cannot subscribe to TRIAL plan" }, { status: 400 });
     }
+
+    const bp = await prisma.billingPlan.findUnique({
+      where: { name: planName }
+    });
+    if (!bp || !bp.isActive) {
+      return NextResponse.json({ error: "Invalid or inactive plan" }, { status: 400 });
+    }
+
+    const amountPaise = bp.priceInr * 100;
 
     if (isMock) {
       return NextResponse.json({
         mock: true,
-        subscriptionId: `sub_mock_${Math.random().toString(36).substring(2, 11)}`,
-        plan: planId,
-        amount: planConfig.price,
+        orderId: `order_mock_${Math.random().toString(36).substring(2, 11)}`,
+        plan: bp.name,
+        amount: amountPaise,
+        credits: bp.credits,
         userId,
       });
     }
 
-    // Find custom Razorpay plan ID from settings
-    const settingKey = `razorpay_plan_${planId.toLowerCase()}`;
-    const envKey = `RAZORPAY_PLAN_${planId.toUpperCase()}`;
-    const razorpayPlanId = await getSetting(settingKey, envKey);
-
-    if (!razorpayPlanId) {
-      return NextResponse.json(
-        { error: `Razorpay plan ID for ${planId} (${settingKey}) is not configured on the server.` },
-        { status: 500 }
-      );
-    }
-
-    // Call Razorpay Subscriptions API
+    // Call Razorpay Orders API for dynamic plans
     try {
-      const res = await fetch("https://api.razorpay.com/v1/subscriptions", {
+      const res = await fetch("https://api.razorpay.com/v1/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Basic ${Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString("base64")}`,
         },
         body: JSON.stringify({
-          plan_id: razorpayPlanId,
-          total_count: 12,
-          quantity: 1,
+          amount: amountPaise,
+          currency: "INR",
+          receipt: `sub_${userId}_${Date.now()}`,
           notes: {
             userId,
-            plan: planId,
+            plan: bp.name,
+            planCredits: bp.credits.toString(),
+            type: "subscription",
           },
         }),
       });
 
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("Razorpay subscription creation failed:", errorData);
-        return NextResponse.json({ error: "Razorpay subscription creation failed" }, { status: 500 });
+        console.error("Razorpay order creation failed:", errorData);
+        return NextResponse.json({ error: "Razorpay order creation failed" }, { status: 500 });
       }
 
-      const subscription = await res.json();
+      const order = await res.json();
       return NextResponse.json({
         mock: false,
         keyId: KEY_ID,
-        subscriptionId: subscription.id,
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
       });
     } catch (e) {
       console.error(e);
