@@ -20,6 +20,8 @@ import { join } from "path";
 const STORAGE_DIR = process.env.STORAGE_DIR ?? join(process.cwd(), "data", "storage");
 const CRON_SECRET = process.env.CRON_SECRET;
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   // Simple bearer token auth for cron jobs
   if (CRON_SECRET) {
