@@ -559,3 +559,60 @@ h3 { font-size: 1.125rem; }
     background: rgba(248, 113, 113, 0.08);
   }
 }
+
+/* ===================================================
+   Responsive adjustments for Mobile & Tablets
+   =================================================== */
+
+@media (max-width: 768px) {
+  .dash-topbar {
+    height: auto !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: var(--space-3) var(--space-4) !important;
+    gap: var(--space-3) !important;
+  }
+
+  .dash-topbar-left {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .dash-brand {
+    margin-right: 0 !important;
+  }
+
+  .dash-nav {
+    display: flex !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    padding: 4px 0 !important;
+    width: 100% !important;
+    gap: var(--space-2) !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dash-nav::-webkit-scrollbar {
+    display: none; /* Hide scrollbar for cleaner look */
+  }
+
+  .dash-topbar-right {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: var(--space-3) !important;
+  }
+
+  .dash-user {
+    display: none !important; /* Hide user name text to save width */
+  }
+
+  .dash-credits {
+    flex-grow: 1 !important;
+    justify-content: center !important;
+  }
+}
+
