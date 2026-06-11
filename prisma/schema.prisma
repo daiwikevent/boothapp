@@ -34,6 +34,9 @@ model User {
   countdownSecs Int      @default(3)     // booth countdown (1–10)
   boothPin      String   @default("0000") // T22: 4-digit PIN for booth settings lock
   gdriveRefreshToken String?   // OAuth refresh token for Google Drive integration
+  drive_folder_link  String?
+  drive_folder_id    String?
+  drive_enabled      Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -10,6 +10,7 @@ import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { listEvents, createEvent } from "@/lib/db-scoped";
 import type { ScopedSession } from "@/lib/db-scoped";
+import { verifyAndUploadSample } from "@/lib/gdrive";
 
 function slugify(name: string): string {
   return name
@@ -38,14 +39,32 @@ export async function POST(req: NextRequest) {
   const scoped: ScopedSession = { user: { id: session.user.id } };
   const slug = slugify(name.trim()) + "-" + Date.now().toString(36);
 
+  let resolvedFolderId: string | null = null;
+  if (gdriveFolderId && gdriveFolderId.trim()) {
+    try {
+      resolvedFolderId = await verifyAndUploadSample(
+        session.user.id,
+        gdriveFolderId
+      );
+    } catch (err: unknown) {
+      console.error("[GDrive Verification Failed on Create]:", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json(
+        { error: `Verification failed: ${errMsg}. Verify the folder URL is shared and has Editor permissions.` },
+        { status: 400 }
+      );
+    }
+  }
+
   try {
     const event = await createEvent(scoped, {
       name: name.trim(),
       slug,
-      gdriveFolderId: gdriveFolderId?.trim() || null,
+      gdriveFolderId: resolvedFolderId,
     });
     return NextResponse.json(event, { status: 201 });
   } catch {
     return NextResponse.json({ error: "An event with a similar name already exists." }, { status: 409 });
   }
 }
+

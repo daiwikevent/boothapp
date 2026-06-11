@@ -80,6 +80,22 @@ export async function clearGDriveRefreshToken(
   });
 }
 
+/** Update user's Service Account Google Drive settings. */
+export async function updateUserGDriveSettings(
+  session: ScopedSession,
+  data: {
+    drive_folder_link: string | null;
+    drive_folder_id: string | null;
+    drive_enabled: boolean;
+  }
+): Promise<User> {
+  return prisma.user.update({
+    where: { id: session.user.id },
+    data,
+  });
+}
+
+
 // ─── Events ───────────────────────────────────────────────────────────────────
 
 /** List all events for the session user, newest first. */

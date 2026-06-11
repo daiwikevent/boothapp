@@ -19,6 +19,10 @@ interface Props {
   countdownSecs: number;
   logoUrl: string | null;
   boothPin: string;
+  isGDriveConnected: boolean;
+  drive_folder_link: string | null;
+  drive_folder_id: string | null;
+  drive_enabled: boolean;
   features?: {
     hasCustomPresets: boolean;
     hasCustomLogo: boolean;
@@ -27,6 +31,7 @@ interface Props {
     hasAttendantPin: boolean;
   };
   creditPacks: CreditPack[];
+  isGDriveAllowedByAdmin: boolean;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -59,8 +64,13 @@ export default function AccountClient({
   countdownSecs,
   logoUrl: initialLogoUrl,
   boothPin: initialBoothPin,
+  isGDriveConnected: _isGDriveConnected,
+  drive_folder_link,
+  drive_folder_id: _drive_folder_id,
+  drive_enabled,
   features,
   creditPacks,
+  isGDriveAllowedByAdmin,
 }: Props) {
   const [name, setName] = useState(displayName);
   const [company, setCompany] = useState(companyName);
@@ -80,6 +90,44 @@ export default function AccountClient({
   const [savingPin, setSavingPin] = useState(false);
   const [savedPin, setSavedPin] = useState(false);
   const [pinError, setPinError] = useState("");
+
+  // Service Account Google Drive Integration state
+  const [driveEnabled, setDriveEnabled] = useState(drive_enabled);
+  const [driveFolderLink, setDriveFolderLink] = useState(drive_folder_link || "");
+  const [savingGDrive, setSavingGDrive] = useState(false);
+  const [savedGDrive, setSavedGDrive] = useState(false);
+  const [gdriveError, setGdriveError] = useState("");
+
+  async function handleSaveServiceAccountGDrive(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingGDrive(true);
+    setSavedGDrive(false);
+    setGdriveError("");
+
+    try {
+      const res = await fetch("/api/user/settings/google-drive", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          folderLink: driveFolderLink,
+          enabled: driveEnabled,
+        }),
+      });
+
+      if (!res.ok) {
+        const d = await res.json();
+        setGdriveError(d.error || "Failed to save settings");
+        return;
+      }
+
+      setSavedGDrive(true);
+      setTimeout(() => setSavedGDrive(false), 3000);
+    } catch {
+      setGdriveError("Failed to save settings");
+    } finally {
+      setSavingGDrive(false);
+    }
+  }
 
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -490,16 +538,76 @@ export default function AccountClient({
         </div>
       </div>
 
-      {/* Google Drive Info Box */}
-      <div className="card" style={{ padding: "var(--space-6)", marginBottom: "var(--space-6)" }}>
+      {/* Google Drive Integration */}
+      {isGDriveAllowedByAdmin && (
+        <div className="card" style={{ padding: "var(--space-6)", marginBottom: "var(--space-6)" }}>
         <h2 style={{ fontFamily: "var(--font-poppins), Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: "var(--text)", marginBottom: "var(--space-2)" }}>
-          ☁️ Google Drive Syncing
+          ☁️ Google Drive Integration
         </h2>
-        <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0, lineHeight: 1.5 }}>
-          Google Drive folder links are now configured **per-event**. To link a folder:{" "}
-          Go to <a href="/events" style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>Events</a> → Click on **📸 Gallery** for your event → Open the **Google Drive** tab.
+        <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: "var(--space-4)" }}>
+          Save a Google Drive folder link to upload generated images automatically.
         </p>
+
+        <form onSubmit={handleSaveServiceAccountGDrive} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+          {/* Toggle Switch */}
+          <label className="toggle-switch" style={{ display: "inline-flex", alignItems: "center", cursor: "pointer", gap: 12, userSelect: "none" }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: driveEnabled ? "var(--text)" : "var(--text-muted)" }}>
+              {driveEnabled ? "Enabled" : "Disabled"}
+            </span>
+            <div style={{ position: "relative" }}>
+              <input
+                type="checkbox"
+                checked={driveEnabled}
+                onChange={(e) => setDriveEnabled(e.target.checked)}
+                style={{ display: "none" }}
+              />
+              <div style={{
+                width: 44, height: 22,
+                background: driveEnabled ? "var(--success)" : "var(--border)",
+                borderRadius: 999,
+                transition: "background-color 0.2s",
+                position: "relative"
+              }}>
+                <div style={{
+                  width: 18, height: 18,
+                  background: "#fff",
+                  borderRadius: "50%",
+                  position: "absolute",
+                  top: 2,
+                  left: driveEnabled ? 24 : 2,
+                  transition: "left 0.2s"
+                }} />
+              </div>
+            </div>
+          </label>
+
+          {/* Folder link input */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label className="form-label">Google Drive Folder Link</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="https://drive.google.com/drive/folders/1eyBjNpX-4DP4bxn4c7KRus_hhsMQDHpY?usp=sharing"
+              value={driveFolderLink}
+              onChange={(e) => setDriveFolderLink(e.target.value)}
+              disabled={savingGDrive}
+            />
+            <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+              Paste the shared folder link from Google Drive where images will be saved. The folder must be shared as &quot;Anyone with the link can edit&quot;.
+            </p>
+          </div>
+
+          {gdriveError && <div className="auth-error">{gdriveError}</div>}
+
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={savingGDrive}>
+              {savingGDrive ? "Saving…" : "Save Link"}
+            </button>
+            {savedGDrive && <span style={{ color: "var(--success)", fontSize: 14, fontWeight: 500 }}>✓ Saved</span>}
+          </div>
+        </form>
       </div>
+      )}
 
       {/* Danger zone */}
       <div className="card" style={{ padding: "var(--space-6)", borderColor: "rgba(248, 113, 113, 0.3)" }}>

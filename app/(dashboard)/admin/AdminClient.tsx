@@ -146,6 +146,7 @@ export default function AdminClient({
     smtp_user: "",
     smtp_pass: "",
     mail_from: "",
+    enable_gdrive: "true",
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [savedSettings, setSavedSettings] = useState(false);
@@ -976,6 +977,30 @@ export default function AdminClient({
                   placeholder="noreply@boothmagic.app"
                   autoComplete="off"
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Google Drive Settings Section */}
+          <div className="card" style={{ padding: "var(--space-6)" }}>
+            <h3 style={{ fontFamily: "var(--font-poppins), Poppins, sans-serif", fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: "var(--space-4)", display: "flex", alignItems: "center", gap: 8 }}>
+              ☁️ Google Drive System Settings
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+              <div className="form-group">
+                <label className="form-label">Google Drive Integration status for users</label>
+                <select
+                  id="enable-gdrive-select"
+                  className="form-input"
+                  value={settings.enable_gdrive ?? "true"}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, enable_gdrive: e.target.value }))}
+                >
+                  <option value="true">Enabled (Users can link their Google Drive folders)</option>
+                  <option value="false">Disabled (Users cannot configure or use Google Drive)</option>
+                </select>
+                <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
+                  If disabled, the Google Drive settings section on the user Account page will be hidden.
+                </div>
               </div>
             </div>
           </div>

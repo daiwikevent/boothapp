@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertAdmin } from "@/lib/db-scoped";
 import type { ScopedSession } from "@/lib/db-scoped";
+import { invalidateSettingsCache } from "@/lib/app-settings";
 
 // Keys that should be masked (only show last 6 chars) when read back
 const SENSITIVE_KEYS = [
@@ -87,6 +88,10 @@ export async function POST(req: NextRequest) {
     )
   );
 
+  // Invalidate settings cache
+  invalidateSettingsCache();
+
   return NextResponse.json({ ok: true });
 }
+
 

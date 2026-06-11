@@ -191,3 +191,67 @@ export async function uploadToGoogleDriveBackground(
     console.error(`[GDrive] Background upload failed for photo ${filename}:`, error);
   }
 }
+
+/**
+ * Verifies that a Google Drive folder exists and has write (edit) access
+ * by uploading a small sample connection-test file.
+ * Returns the resolved clean folder ID on success, or throws an error on failure.
+ */
+export async function verifyAndUploadSample(
+  userId: string,
+  rawFolderIdOrUrl: string,
+  eventIdOrLabel?: string
+): Promise<string> {
+  const trimmed = rawFolderIdOrUrl.trim();
+  if (!trimmed) {
+    throw new Error("Folder ID/link is empty.");
+  }
+
+  // 1. Resolve folder ID from full sharing URL if pasted
+  let resolvedFolderId = trimmed;
+  if (resolvedFolderId.includes("drive.google.com")) {
+    const match = resolvedFolderId.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      resolvedFolderId = match[1];
+    }
+  }
+
+  // 2. Obtain user refresh token (user -> env fallback -> admin fallback)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { gdriveRefreshToken: true },
+  });
+
+  let refreshToken = user?.gdriveRefreshToken;
+  if (!refreshToken) {
+    refreshToken = process.env.GOOGLE_REFRESH_TOKEN || "";
+  }
+  if (!refreshToken) {
+    const admin = await prisma.user.findFirst({
+      where: { isAdmin: true, gdriveRefreshToken: { not: null } },
+      select: { gdriveRefreshToken: true },
+    });
+    refreshToken = admin?.gdriveRefreshToken || "";
+  }
+
+  if (!refreshToken) {
+    throw new Error("Google Drive is not linked. Please link your Google Account in settings first.");
+  }
+
+  // 3. Obtain access token
+  const accessToken = await refreshAccessToken(refreshToken);
+
+  // 4. Try uploading a sample text file to verify write access
+  const testContent = `BoothMagic Google Drive Connection Verification\nUploaded: ${new Date().toISOString()}\nStatus: Success (Edit Access Verified)\nEvent ID: ${eventIdOrLabel || "New Event"}`;
+
+  await uploadFileToGDrive(
+    accessToken,
+    resolvedFolderId,
+    Buffer.from(testContent, "utf-8"),
+    "boothmagic-connection-test.txt",
+    "text/plain"
+  );
+
+  return resolvedFolderId;
+}
+

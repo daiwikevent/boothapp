@@ -25,7 +25,7 @@ import { join } from "path";
 import sharp from "sharp";
 import { nanoid } from "nanoid";
 import { getSetting } from "@/lib/app-settings";
-import { uploadToGoogleDriveBackground } from "@/lib/gdrive";
+import { handleDriveUpload } from "@/lib/handleDriveUpload";
 import { hasFeature } from "@/lib/plans";
 
 const STORAGE_DIR = process.env.STORAGE_DIR ?? join(process.cwd(), "data", "storage");
@@ -284,14 +284,13 @@ export async function POST(req: NextRequest) {
 
     await writeFile(outputPath, outputBuffer);
 
-    // Google Drive integration: upload in the background if configured for the event
-    if (event.gdriveFolderId && session.user.id) {
-      uploadToGoogleDriveBackground(
+    // Service Account Google Drive integration: upload in the background
+    if (session.user.id) {
+      handleDriveUpload(
         session.user.id,
-        event.gdriveFolderId,
         outputPath,
         outputFilename
-      ).catch(err => console.error("[GDrive generate] Background trigger error:", err));
+      ).catch(err => console.error("[GDrive generate] Background upload error:", err));
     }
   } catch (e) {
     await markPhotoFailed(photo.id, `Post-processing failed: ${e}`);
