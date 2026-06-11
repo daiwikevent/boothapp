@@ -2,6 +2,24 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+interface BillingPlan {
+  id: string;
+  name: string;
+  label: string;
+  priceInr: number;
+  credits: number;
+  features: string[];
+  isActive: boolean;
+}
+
+interface Props {
+  plans: BillingPlan[];
+  userEmail: string | null;
+  currentPlan: string | null;
+}
 
 const FEATURES = [
   {
@@ -147,7 +165,79 @@ function HoverCard({ children, style, hoverStyle }: {
   );
 }
 
-export default function HomeClient() {
+export default function HomeClient({ plans = [], userEmail = null, currentPlan = null }: Partial<Props>) {
+  const router = useRouter();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const activePlans = plans.filter((p) => p.isActive);
+
+  const loadRazorpay = () =>
+    new Promise((resolve) => {
+      if ((window as { Razorpay?: unknown }).Razorpay) return resolve(true);
+      const s = document.createElement("script");
+      s.src = "https://checkout.razorpay.com/v1/checkout.js";
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.body.appendChild(s);
+    });
+
+  async function handleBuy(planName: string) {
+    if (!userEmail) {
+      router.push(`/login?callbackUrl=/#pricing`);
+      return;
+    }
+    setLoadingPlan(planName);
+    try {
+      const res = await fetch("/api/razorpay/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "subscription", plan: planName }),
+      });
+      if (!res.ok) { alert("Failed to initiate checkout"); return; }
+      const data = await res.json();
+
+      if (data.mock) {
+        const wh = await fetch("/api/razorpay/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event: "payment.captured",
+            payload: {
+              payment: {
+                entity: {
+                  id: data.orderId, amount: data.amount, status: "captured",
+                  notes: { userId: data.userId, plan: data.plan, planCredits: data.credits.toString(), type: "subscription" },
+                },
+              },
+            },
+          }),
+        });
+        if (wh.ok) { alert("Plan activated! Credits granted."); router.push("/dashboard"); router.refresh(); }
+        else alert("Mock checkout failed.");
+      } else {
+        const ok = await loadRazorpay();
+        if (!ok) { alert("Razorpay failed to load."); return; }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rzp = new (window as any).Razorpay({
+          key: data.keyId,
+          amount: data.amount,
+          currency: "INR",
+          name: "BoothMagic AI",
+          description: `${planName} Plan`,
+          order_id: data.orderId,
+          handler: () => { alert("Payment successful! Plan upgraded."); router.push("/dashboard"); router.refresh(); },
+          prefill: { email: userEmail },
+          theme: { color: "#7C5CFF" },
+        });
+        rzp.open();
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Something went wrong.");
+    } finally {
+      setLoadingPlan(null);
+    }
+  }
+
   return (
     <>
       {/* ═══════════════════ STICKY NAV ═══════════════════ */}
@@ -187,7 +277,7 @@ export default function HomeClient() {
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <Link href="#features" className="nav-link" style={{ fontSize: 14 }}>Features</Link>
           <Link href="#how-it-works" className="nav-link" style={{ fontSize: 14 }}>How It Works</Link>
-          <Link href="/pricing" className="nav-link" style={{ fontSize: 14 }}>Pricing</Link>
+          <Link href="#pricing" className="nav-link" style={{ fontSize: 14 }}>Pricing</Link>
           <Link href="/login" className="nav-link" style={{ fontSize: 14 }}>Login</Link>
           <Link href="/signup" className="btn btn-primary btn-sm" style={{ marginLeft: 8 }}>
             Start Free ⚡
@@ -282,7 +372,7 @@ export default function HomeClient() {
                 🚀 Start Free — 9 Credits Included
               </Link>
               <Link
-                href="/pricing"
+                href="#pricing"
                 className="btn btn-secondary"
                 style={{ fontSize: 16, padding: "14px 32px", borderRadius: 12 }}
               >
@@ -770,77 +860,222 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* ═══════ D — DESIRE: PRICING TEASER ═══════ */}
-        <section style={{ padding: "100px 24px" }}>
-          <div style={{ maxWidth: 860, margin: "0 auto", textAlign: "center" }}>
-            <div
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "6px 16px", borderRadius: 999,
-                background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.25)",
-                color: "#34D399", fontSize: 12, fontWeight: 700,
-                textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 20,
-              }}
-            >
-              💰 Simple Pricing
-            </div>
-            <h2
-              style={{
-                fontSize: "clamp(1.8rem, 4vw, 3rem)",
-                fontFamily: "var(--font-poppins), Poppins, sans-serif",
-                fontWeight: 800, marginBottom: 16, letterSpacing: "-0.02em",
-              }}
-            >
-              Transparent Pricing in ₹
-            </h2>
-            <p style={{ color: "var(--text-muted)", fontSize: 16, maxWidth: 520, margin: "0 auto 48px" }}>
-              Pay only for what you use. No annual contracts. Scale up for big events and down in off-season.
-            </p>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20, marginBottom: 48 }}>
-              {[
-                { plan: "Trial", price: "Free", credits: "9 credits", highlight: false, tag: "" },
-                { plan: "Starter", price: "₹799", credits: "54 credits/month", highlight: false, tag: "~18 photos" },
-                { plan: "Pro", price: "₹1,599", credits: "120 credits/month", highlight: true, tag: "~40 photos" },
-                { plan: "Business", price: "₹2,999", credits: "240 credits/month", highlight: false, tag: "~80 photos" },
-              ].map((p) => (
-                <div
-                  key={p.plan}
-                  style={{
-                    background: p.highlight ? "var(--gradient-primary)" : "var(--surface)",
-                    border: p.highlight ? "none" : "1px solid var(--border)",
-                    borderRadius: 18, padding: "28px 20px", textAlign: "center",
-                    boxShadow: p.highlight ? "0 16px 48px rgba(124,92,255,0.35)" : "none",
-                    transform: p.highlight ? "scale(1.04)" : "none",
-                    transition: "all 0.25s ease",
-                  }}
-                >
-                  {p.highlight && (
-                    <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "rgba(255,255,255,0.8)", marginBottom: 12 }}>
-                      ⭐ Most Popular
-                    </div>
-                  )}
-                  <div style={{ fontFamily: "var(--font-poppins), Poppins, sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 4, color: p.highlight ? "#fff" : "var(--text)" }}>
-                    {p.plan}
-                  </div>
-                  <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "var(--font-poppins), Poppins, sans-serif", marginBottom: 4, color: p.highlight ? "#fff" : "var(--text)" }}>
-                    {p.price}
-                  </div>
-                  {p.tag && (
-                    <div style={{ fontSize: 12, color: p.highlight ? "rgba(255,255,255,0.7)" : "var(--text-muted)", marginBottom: 8 }}>
-                      {p.tag}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 13, fontWeight: 600, color: p.highlight ? "rgba(255,255,255,0.85)" : "var(--text-muted)" }}>
-                    {p.credits}
-                  </div>
-                </div>
-              ))}
+        {/* ═══════ D — DESIRE / A — ACTION: FULL PRICING ═══════ */}
+        <section id="pricing" style={{ padding: "100px 24px", background: "var(--bg)" }}>
+          <div style={{ maxWidth: 1160, margin: "0 auto" }}>
+            {/* Section header */}
+            <div style={{ textAlign: "center", marginBottom: 64 }}>
+              <div
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  padding: "6px 16px", borderRadius: 999,
+                  background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.25)",
+                  color: "#34D399", fontSize: 12, fontWeight: 700,
+                  textTransform: "uppercase" as const, letterSpacing: "0.08em", marginBottom: 20,
+                }}
+              >
+                💰 Simple Pricing
+              </div>
+              <h2
+                style={{
+                  fontSize: "clamp(1.8rem, 4vw, 3rem)",
+                  fontFamily: "var(--font-poppins), Poppins, sans-serif",
+                  fontWeight: 800, marginBottom: 16, letterSpacing: "-0.02em",
+                }}
+              >
+                Simple, Honest Pricing in{" "}
+                <span className="gradient-text">₹</span>
+              </h2>
+              <p style={{ color: "var(--text-muted)", fontSize: 16, maxWidth: 520, margin: "0 auto" }}>
+                Pay in rupees. No annual lock-in. Scale up for big events, scale down in the off-season.
+                All plans include your first 9 credits free.
+              </p>
             </div>
 
-            <Link href="/pricing" className="btn btn-secondary" style={{ fontSize: 15, padding: "12px 28px" }}>
-              See Full Feature Comparison →
-            </Link>
+            {/* Live plan cards from DB */}
+            {activePlans.length > 0 ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gap: 24,
+                  alignItems: "stretch",
+                }}
+              >
+                {activePlans.map((plan) => {
+                  const isActive = currentPlan?.toUpperCase() === plan.name.toUpperCase();
+                  const isPro = plan.name.toUpperCase() === "PRO";
+                  const isLoading = loadingPlan === plan.name;
+                  return (
+                    <div
+                      key={plan.id}
+                      className="pricing-plan-card"
+                      style={{
+                        background: isPro ? "var(--gradient-primary)" : "var(--surface)",
+                        border: isPro ? "2px solid var(--primary)" : "1px solid var(--border)",
+                        borderRadius: 22,
+                        padding: "36px 28px 28px",
+                        display: "flex",
+                        flexDirection: "column",
+                        position: "relative",
+                        transition: "all 0.25s ease",
+                        transform: isPro ? "scale(1.03)" : "none",
+                        boxShadow: isPro ? "0 24px 64px rgba(124,92,255,0.4)" : "none",
+                      }}
+                    >
+                      {/* Most popular badge */}
+                      {isPro && (
+                        <span
+                          style={{
+                            position: "absolute", top: -14, left: "50%",
+                            transform: "translateX(-50%)",
+                            background: "#fff",
+                            color: "var(--primary)",
+                            fontSize: 11, fontWeight: 800,
+                            padding: "4px 14px", borderRadius: 999,
+                            textTransform: "uppercase" as const, letterSpacing: "0.06em",
+                            whiteSpace: "nowrap" as const,
+                          }}
+                        >
+                          ⭐ Most Popular
+                        </span>
+                      )}
+
+                      {/* Plan name + price */}
+                      <div style={{ marginBottom: 8 }}>
+                        <div
+                          style={{
+                            fontSize: 13, fontWeight: 700, textTransform: "uppercase" as const,
+                            letterSpacing: "0.1em",
+                            color: isPro ? "rgba(255,255,255,0.8)" : "var(--text-muted)",
+                            marginBottom: 8,
+                          }}
+                        >
+                          {plan.label}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                          <span
+                            style={{
+                              fontSize: 42, fontWeight: 800,
+                              fontFamily: "var(--font-poppins), Poppins, sans-serif",
+                              color: isPro ? "#fff" : "var(--text)",
+                              lineHeight: 1,
+                            }}
+                          >
+                            {plan.priceInr === 0 ? "Free" : `₹${plan.priceInr.toLocaleString("en-IN")}`}
+                          </span>
+                          {plan.priceInr > 0 && (
+                            <span style={{ fontSize: 14, color: isPro ? "rgba(255,255,255,0.6)" : "var(--text-muted)" }}>
+                              /month
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13, fontWeight: 600, marginTop: 6,
+                            color: isPro ? "rgba(255,255,255,0.85)" : "var(--primary)",
+                          }}
+                        >
+                          ⚡ {plan.credits} credits included
+                        </div>
+                      </div>
+
+                      {/* Divider */}
+                      <hr
+                        style={{
+                          border: 0,
+                          borderTop: isPro ? "1px solid rgba(255,255,255,0.2)" : "1px solid var(--border)",
+                          margin: "20px 0",
+                        }}
+                      />
+
+                      {/* Features list */}
+                      <ul
+                        style={{
+                          listStyle: "none", padding: 0, margin: "0 0 28px 0",
+                          display: "flex", flexDirection: "column", gap: 10, flex: 1,
+                        }}
+                      >
+                        {plan.features.map((feat, fi) => (
+                          <li
+                            key={fi}
+                            style={{
+                              fontSize: 13,
+                              color: isPro ? "rgba(255,255,255,0.85)" : "var(--text-muted)",
+                              display: "flex", gap: 8, alignItems: "flex-start",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: isPro ? "rgba(255,255,255,0.9)" : "var(--success)",
+                                fontWeight: 700, flexShrink: 0, marginTop: 1,
+                              }}
+                            >
+                              ✓
+                            </span>
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {/* CTA Button */}
+                      <button
+                        onClick={() => handleBuy(plan.name)}
+                        disabled={isActive || loadingPlan !== null}
+                        style={{
+                          width: "100%",
+                          padding: "14px 20px",
+                          borderRadius: 12,
+                          border: isPro ? "none" : "1px solid var(--border)",
+                          fontSize: 15, fontWeight: 700,
+                          cursor: isActive || loadingPlan !== null ? "not-allowed" : "pointer",
+                          transition: "all 0.2s ease",
+                          background: isPro
+                            ? "rgba(255,255,255,0.2)"
+                            : isActive
+                            ? "var(--surface-2)"
+                            : "var(--gradient-primary)",
+                          color: isPro ? "#fff" : isActive ? "var(--text-muted)" : "#fff",
+                          boxShadow: !isPro && !isActive ? "0 4px 16px rgba(124,92,255,0.35)" : "none",
+                          opacity: isActive ? 0.6 : 1,
+                        }}
+                      >
+                        {isActive
+                          ? "✓ Current Plan"
+                          : isLoading
+                          ? "Connecting..."
+                          : plan.priceInr === 0
+                          ? "Get Started Free"
+                          : `Buy ${plan.label} — ₹${plan.priceInr.toLocaleString("en-IN")}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* Fallback static cards while plans load */
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+                {["Trial — Free", "Starter — ₹799", "Pro — ₹1,599", "Business — ₹2,999"].map((p) => (
+                  <div
+                    key={p}
+                    style={{
+                      background: "var(--surface)", border: "1px solid var(--border)",
+                      borderRadius: 20, padding: "32px 24px", textAlign: "center",
+                    }}
+                  >
+                    <div style={{ color: "var(--text-muted)", fontSize: 15 }}>{p}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Trust footer */}
+            <div style={{ textAlign: "center", marginTop: 40 }}>
+              <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                ✅ No credit card for free trial &nbsp;·&nbsp; 🔒 Payments secured by Razorpay &nbsp;·&nbsp;
+                💬 Cancel anytime
+              </p>
+            </div>
           </div>
         </section>
 
@@ -889,7 +1124,7 @@ export default function HomeClient() {
                 🚀 Get Started Free
               </Link>
               <Link
-                href="/pricing"
+                href="#pricing"
                 className="btn btn-secondary"
                 style={{ fontSize: 18, padding: "16px 32px", borderRadius: 14 }}
               >
@@ -966,6 +1201,10 @@ export default function HomeClient() {
         .hiw-hover-card:hover {
           border-color: rgba(124,92,255,0.4) !important;
           box-shadow: 0 12px 32px rgba(124,92,255,0.15) !important;
+        }
+        .pricing-plan-card:hover {
+          transform: translateY(-6px) scale(1.01) !important;
+          box-shadow: 0 24px 64px rgba(124,92,255,0.25) !important;
         }
       `}</style>
     </>
